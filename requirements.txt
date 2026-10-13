@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+jinja2>=3.1
+yt-dlp>=2024.5
+requests>=2.31
+beautifulsoup4>=4.12
+faster-whisper>=1.0
+mutagen>=1.47
+python-dotenv>=1.0
+send2trash>=1.8

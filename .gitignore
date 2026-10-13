@@ -1,0 +1,44 @@
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Machine-local configuration and credentials
+.env
+.env.*
+!.env.example
+automator_profile.json
+cookie.txt
+cookies.txt
+*.sqlite
+*.sqlite3
+*.db
+info.db
+
+# Runtime downloads, caches, work files, and logs
+downloads/
+.automator_tmp/
+_cleanup_backup/
+/%TEMP%/
+album_tracks_cache.json
+albums_cache.json
+trending_cache.json
+thumbnails_cache.json
+discover_settings.json
+dedupe_skipped.json
+uvicorn.out
+uvicorn.err
+*.log
+
+# Local media tools (install FFmpeg separately; see docs/SETUP.md)
+/ffmpeg.exe
+/ffprobe.exe
+/ffplay.exe
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

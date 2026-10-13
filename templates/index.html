@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#11120f">
+    <title>Sleeve · {{ {'gallery': 'Library', 'discover': 'Discover', 'automator': 'Automator', 'repair': 'Repair'}.get(active_tab, 'Library') }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/png" href="/static/sleeve-mark.png">
+</head>
+<body data-active-tab="{{ active_tab }}">
+
+    <!-- Main application sections -->
+    <nav class="topnav" aria-label="Primary">
+        <a class="topnav-brand" href="/gallery" aria-label="Sleeve home">
+            <img class="brand-mark" src="/static/sleeve-mark.png" alt="" width="42" height="42">
+            <span class="brand-text">sleeve<span class="brand-period">.</span></span>
+        </a>
+        <div class="topnav-links" role="navigation" aria-label="Main sections">
+            <a class="topnav-link{% if active_tab == 'gallery' %} is-active{% endif %}" href="/gallery"{% if active_tab == 'gallery' %} aria-current="page"{% endif %}>
+                Library
+            </a>
+            <a class="topnav-link{% if active_tab == 'discover' %} is-active{% endif %}" href="/discover"{% if active_tab == 'discover' %} aria-current="page"{% endif %}>
+                Discover
+            </a>
+            <a class="topnav-link{% if active_tab == 'automator' %} is-active{% endif %}" href="/automator"{% if active_tab == 'automator' %} aria-current="page"{% endif %}>
+                Automator
+            </a>
+            <a class="topnav-link{% if active_tab == 'repair' %} is-active{% endif %}" href="/repair"{% if active_tab == 'repair' %} aria-current="page"{% endif %}>
+                Repair
+            </a>
+        </div>
+    </nav>
+
+    <header class="page-header">
+        <div class="header-inner">
+            <h1 class="page-title">
+                {% if active_tab == 'automator' %}Automator
+                {% elif active_tab == 'repair' %}Repair
+                {% elif active_tab == 'discover' %}Discover
+                {% else %}Your library{% endif %}
+            </h1>
+            <p class="source-line" id="src">&nbsp;</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Cookies section -->
+        {% if active_tab != 'repair' %}
+        <details class="card panel utility-disclosure" aria-labelledby="cookies-h">
+            <summary class="utility-summary"><span class="panel-title" id="cookies-h">Download setup</span><span class="muted small">Optional sign-in cookies for YouTube</span></summary>
+            <div class="utility-content">
+            <div class="panel-head">
+                <h2 class="panel-title"><span class="panel-emoji" aria-hidden="true">&#128273;</span> Browser cookies</h2>
+                <span id="ck-status" class="status muted" role="status" aria-live="polite"></span>
+            </div>
+            <p class="panel-desc">Export browser cookies so downloads work where YouTube requires sign-in.</p>
+            <div class="row controls">
+                <label class="visually-hidden" for="browser">Browser</label>
+                <select id="browser" class="select" aria-label="Browser to export cookies from"></select>
+                <button id="export-cookies" class="btn btn-primary" type="button">Export to cookie.txt</button>
+                <button id="clean-cookies" class="btn btn-ghost" type="button" title="Repair cookie.txt (rejoin split lines, strip NUL bytes)">Clean cookie.txt</button>
+            </div>
+            <p class="hint">Close the browser first on Windows &mdash; otherwise export fails (locked cookie DB). If downloads fail with &ldquo;does not look like a Netscape format cookies file&rdquo;, hit Clean.</p>
+            </div>
+        </details>
+        {% endif %}
+
+        {% if active_tab == 'gallery' %}
+        <!-- Jellyfin library -->
+        <section class="panel" id="panel-gallery">
+            <div class="card">
+                <!-- Single bar: album-grid filter + YouTube quick-add side by side -->
+                <div class="gallery-bar">
+                    <form class="search-bar gallery-search" id="gallery-search-form" autocomplete="off" role="search">
+                        <label class="visually-hidden" for="gallery-search-input">Filter albums</label>
+                        <span class="search-icon" aria-hidden="true">&#128269;</span>
+                        <input class="search-input" id="gallery-search-input" type="search"
+                               placeholder="Filter your library by title or artist…"
+                               enterkeyhint="search" autocomplete="off">
+                    </form>
+                    <div class="quick-add-inline">
+                        <input class="search-input" id="quick-add-url" type="url"
+                               placeholder="Paste a YouTube link to add 1 song"
+                               autocomplete="off">
+                        <button class="btn btn-primary btn-sm" id="quick-add-go" type="button">Add</button>
+                    </div>
+                </div>
+                <p class="muted small" id="quick-add-feedback" aria-live="polite">&nbsp;</p>
+
+                <p class="panel-desc" id="gallery-meta">Loading your library…</p>
+                <div id="gallery-grid" class="albums-grid" aria-busy="true">
+                    <div class="grid-placeholder" aria-hidden="true">
+                        <div class="ph-card"></div>
+                        <div class="ph-card"></div>
+                        <div class="ph-card"></div>
+                        <div class="ph-card"></div>
+                        <div class="ph-card"></div>
+                        <div class="ph-card"></div>
+                    </div>
+                </div>
+                <div class="gallery-pager" id="gallery-pager" hidden>
+                    <button class="btn btn-ghost" id="gallery-load-more" type="button">Load more</button>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if active_tab == 'discover' %}
+        <section class="panel" id="panel-discover">
+            <div class="card discover-hero">
+                <p class="eyebrow">Find something worth keeping</p>
+                <h2 class="discover-title">A little more music.</h2>
+                <p class="panel-desc">Browse current charts, explore new albums, or search across your enabled music sources.</p>
+                <form class="search-bar" id="discover-search-form" role="search">
+                    <label class="visually-hidden" for="discover-search-input">Search albums or songs</label>
+                    <span class="search-icon" aria-hidden="true">&#128269;</span>
+                    <input class="search-input" id="discover-search-input" type="search" placeholder="Search albums or songs…" autocomplete="off">
+                    <select class="select" id="discover-search-kind" aria-label="Search type"><option value="album">Albums</option><option value="song">Songs</option></select>
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </form>
+                <p id="discover-status" class="status" role="status" aria-live="polite"></p>
+            </div>
+            <section class="card panel" aria-labelledby="trending-title">
+                <div class="panel-head"><div><p class="eyebrow">Charts</p><h2 id="trending-title" class="panel-title">Top 10 tracks</h2></div><button id="discover-refresh" class="btn btn-ghost btn-sm" type="button">Refresh</button></div>
+                <div id="trending-list" class="trending-list" aria-live="polite" aria-busy="true"><p class="muted">Loading charts…</p></div>
+            </section>
+            <section class="card panel" aria-labelledby="discover-results-title">
+                <div class="panel-head"><div><p class="eyebrow">Music databases</p><h2 id="discover-results-title" class="panel-title">New &amp; recommended albums</h2></div></div>
+                <div id="discover-grid" class="albums-grid" aria-live="polite" aria-busy="true"><p class="muted">Loading albums…</p></div>
+            </section>
+        </section>
+        {% endif %}
+
+        {% if active_tab == 'automator' %}
+        <!-- AUTOMATOR PAGE -->
+        <section class="panel" id="panel-automator">
+
+            <!-- Profile banner -->
+            <div class="card panel" id="automator-profile-banner" aria-labelledby="automator-profile-h">
+                <div class="panel-head">
+                    <h2 id="automator-profile-h" class="panel-title">
+                        <span class="panel-emoji" aria-hidden="true">&#9881;</span>
+                        <span id="automator-profile-status">Connecting&hellip;</span>
+                    </h2>
+                </div>
+                <p class="panel-desc" id="automator-profile-detail">&nbsp;</p>
+                <div class="row controls" style="margin-top:.5rem;">
+                    <button class="btn btn-primary" id="automator-edit-settings" type="button">Edit settings</button>
+                    <button class="btn btn-ghost" id="automator-test-connection" type="button">Test connection</button>
+                </div>
+            </div>
+
+            <!-- Discover (search + recent on server) -->
+            <div class="card panel">
+                <h2 class="panel-title"><span class="panel-emoji" aria-hidden="true">&#128269;</span> Discover</h2>
+                <form class="search-bar" id="automator-search-form" autocomplete="off" role="search">
+                    <label class="visually-hidden" for="automator-search-input">Search albums or artists</label>
+                    <span class="search-icon" aria-hidden="true">&#128269;</span>
+                    <input class="search-input" id="automator-search-input" type="search"
+                           placeholder="Search albums or artists"
+                           enterkeyhint="search" autocomplete="off">
+                    <button class="btn btn-primary btn-sm search-btn" type="submit">Search</button>
+                    <button class="btn btn-ghost btn-sm search-clear" type="button" id="automator-search-clear" hidden>Clear</button>
+                </form>
+
+                <div class="sub-tabs" id="automator-subtabs" role="tablist" aria-label="Automator discover">
+                    <button class="sub-tab is-active" data-subtab="automator-search" role="tab" aria-selected="true">
+                        Search
+                    </button>
+                    <button class="sub-tab" data-subtab="automator-recent" role="tab" aria-selected="false">
+                        Recently added
+                    </button>
+                </div>
+
+                <div class="sub-panel is-active" id="automator-search">
+                    <p class="panel-desc" id="automator-search-meta">Search iTunes to find albums.</p>
+                    <div id="automator-search-grid" class="albums-grid" aria-busy="false"></div>
+                </div>
+
+                <div class="sub-panel" id="automator-recent">
+                    <p class="panel-desc" id="automator-recent-meta">Loading&hellip;</p>
+                    <div id="automator-recent-grid" class="albums-grid" aria-busy="false"></div>
+                </div>
+            </div>
+
+            <!-- Cart -->
+            <div class="card panel">
+                <h2 class="panel-title">
+                    <span class="panel-emoji" aria-hidden="true">&#128722;</span>
+                    Queue
+                    <span id="automator-cart-count" class="panel-badge">0</span>
+                </h2>
+                <p class="panel-desc">Picked albums will be downloaded, tagged, transcribed with Whisper, and saved to your Jellyfin library.</p>
+                <div id="automator-cart-list" class="cart-list">
+                    <p class="muted small">Your queue is empty. Search for an album to get started.</p>
+                </div>
+                <div class="row controls" style="margin-top:.75rem; gap:.5rem;">
+                    <button class="btn btn-ghost" id="automator-cart-clear" type="button" disabled>Clear queue</button>
+                    <button class="btn btn-primary" id="automator-cart-review" type="button" disabled>Review &amp; confirm &rarr;</button>
+                </div>
+            </div>
+
+            <!-- Active automator jobs (always visible on this page) -->
+            <div class="card panel" aria-labelledby="automator-jobs-h">
+                <div class="panel-head">
+                    <h2 id="automator-jobs-h" class="panel-title">
+                        <span class="panel-emoji" aria-hidden="true">&#9889;</span>
+                        Automator jobs
+                        <span id="automator-jobs-count" class="panel-badge">0</span>
+                    </h2>
+                </div>
+                <div id="automator-jobs-list" class="jobs-list">
+                    <p class="muted small">No automator jobs yet.</p>
+                </div>
+            </div>
+
+            <!-- Settings modal -->
+            <div class="modal" id="automator-settings-modal" role="dialog" aria-modal="true" aria-labelledby="automator-settings-h" hidden>
+                <div class="modal-backdrop" data-modal-close></div>
+                <div class="modal-card modal-card-lg" role="document">
+                    <div class="modal-head">
+                        <h2 id="automator-settings-h" class="panel-title">
+                            <span class="panel-emoji" aria-hidden="true">&#9881;</span> Automator settings
+                        </h2>
+                        <button class="btn btn-ghost btn-sm" type="button" data-modal-close aria-label="Close">&times;</button>
+                    </div>
+                    <form id="automator-settings-form" class="form" autocomplete="off">
+                        <div class="form-row">
+                            <label for="ap-server-name">Server name</label>
+                            <input class="input" id="ap-server-name" type="text" placeholder="Home Jellyfin">
+                        </div>
+                        <div class="form-row">
+                            <label for="ap-jellyfin-url">Jellyfin URL</label>
+                            <input class="input" id="ap-jellyfin-url" type="url" placeholder="http://192.168.1.50:8096" required>
+                        </div>
+                        <div class="form-row">
+                            <label for="ap-api-key">API key</label>
+                            <div class="row controls" style="gap:.5rem;">
+                                <input class="input" id="ap-api-key" type="password" placeholder="X-Emby-Token" autocomplete="new-password">
+                                <button class="btn btn-ghost btn-sm" id="ap-api-key-show" type="button">Show</button>
+                            </div>
+                            <p class="hint">Find this in Jellyfin &rarr; Administration &rarr; API Keys.</p>
+                        </div>
+                        <div class="form-row">
+                            <label for="ap-music-folder">Music folder (UNC / local path)</label>
+                            <input class="input" id="ap-music-folder" type="text" placeholder="\\JELLYFIN\Music\Automator" required>
+                            <p class="hint">Must be inside Jellyfin's configured library path. On Windows, map the share first or use a UNC path Windows can resolve.</p>
+                        </div>
+                        <div class="form-row-grid">
+                            <div class="form-row">
+                                <label for="ap-whisper-model">Whisper model</label>
+                                <select class="select" id="ap-whisper-model">
+                                    <option value="turbo">turbo (large-v3-turbo) &mdash; best speed/quality, multilingual (Recommended)</option>
+                                    <option value="large-v3">large-v3 &mdash; highest accuracy, slow</option>
+                                    <option value="medium.en">medium.en &mdash; good English, fast</option>
+                                    <option value="small.en">small.en &mdash; balanced, English only</option>
+                                    <option value="small">small &mdash; balanced, multilingual</option>
+                                    <option value="base.en">base.en &mdash; fast, English only</option>
+                                    <option value="tiny.en">tiny.en &mdash; fastest, English only</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label for="ap-whisper-device">Whisper device</label>
+                                <select class="select" id="ap-whisper-device">
+                                    <option value="auto">auto (use CUDA if available)</option>
+                                    <option value="cpu">cpu</option>
+                                    <option value="cuda">cuda</option>
+                                </select>
+                            </div>
+                        </div>
+                        <fieldset class="form-row" style="border:1px solid var(--bg-placeholder); border-radius:8px; padding:.75rem;">
+                            <legend><strong>Backup</strong></legend>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="ap-backup-enabled">
+                                <span>Also save a backup copy</span>
+                            </label>
+                            <div class="form-row-grid" style="margin-top:.5rem;">
+                                <div class="form-row">
+                                    <label for="ap-backup-mode">Mode</label>
+                                    <select class="select" id="ap-backup-mode">
+                                        <option value="skip">skip</option>
+                                        <option value="local">local folder</option>
+                                        <option value="smb">SMB / UNC share</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label for="ap-backup-path">Path</label>
+                                    <input class="input" id="ap-backup-path" type="text" placeholder="\\BACKUP-NAS\Music-Mirror">
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="form-row" style="border:1px solid var(--bg-placeholder); border-radius:8px; padding:.75rem;">
+                            <legend><strong>Discover search providers</strong></legend>
+                            <p class="hint" style="margin-top:0;">Pick which music databases the discover search queries. Pick <strong>All</strong> to query every enabled provider. The aggregator dedupes results across the chosen providers.</p>
+                            <div id="ap-discover-providers-list" class="row controls" style="flex-wrap:wrap; gap:.5rem;"></div>
+                        </fieldset>
+                        <div id="automator-settings-feedback" class="status" role="status" aria-live="polite">&nbsp;</div>
+                        <div class="row controls" style="margin-top:.5rem; justify-content:flex-end; gap:.5rem;">
+                            <button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>
+                            <button class="btn btn-ghost" type="button" id="ap-test">Test connection</button>
+                            <button class="btn btn-primary" type="submit">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Duplicate / flagged-tracks review modal (shows before the run-confirmation modal) -->
+            <div class="modal" id="automator-dupreview-modal" role="dialog" aria-modal="true" aria-labelledby="automator-dupreview-h" hidden>
+                <div class="modal-backdrop" data-modal-close></div>
+                <div class="modal-card modal-card-lg" role="document">
+                    <div class="modal-head">
+                        <h2 id="automator-dupreview-h" class="panel-title">
+                            <span class="panel-emoji" aria-hidden="true">&#9989;</span> Review duplicates
+                        </h2>
+                        <button class="btn btn-ghost btn-sm" type="button" data-modal-close aria-label="Close">&times;</button>
+                    </div>
+                    <p class="hint" id="automator-dupreview-summary">&nbsp;</p>
+                    <div id="automator-dupreview-list" style="max-height: 50vh; overflow-y: auto; margin: .5rem 0;"></div>
+                    <div class="row controls" style="justify-content:flex-end; gap:.5rem;">
+                        <button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>
+                        <button class="btn btn-primary" type="button" id="automator-dupreview-continue">Continue</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download plan before per-track lyrics review -->
+            <div class="modal" id="automator-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="automator-confirm-h" hidden>
+                <div class="modal-backdrop" data-modal-close></div>
+                <div class="modal-card modal-card-lg" role="document">
+                    <div class="modal-head">
+                        <h2 id="automator-confirm-h" class="panel-title">Review download plan</h2>
+                        <button class="btn btn-ghost btn-sm" type="button" data-modal-close aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="muted" id="automator-confirm-summary">&nbsp;</p>
+                        <ol id="automator-confirm-list" class="confirm-list"></ol>
+                        <p class="hint" id="automator-confirm-estimate">&nbsp;</p>
+                        <label class="checkbox-row" style="margin-top:.75rem;">
+                            <input type="checkbox" id="automator-confirm-backup">
+                            <span>Also save backup copy <span id="automator-confirm-backup-hint" class="muted small"></span></span>
+                        </label>
+                    </div>
+                    <div class="modal-foot" style="display:flex; justify-content:flex-end; gap:.5rem;">
+                        <button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>
+                        <button class="btn btn-primary" id="automator-confirm-go" type="button">Review lyrics</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lyrics review modal (shown before jobs start) -->
+            <div class="modal" id="automator-subs-modal" role="dialog" aria-modal="true" aria-labelledby="automator-subs-h" hidden>
+                <div class="modal-backdrop" data-modal-close></div>
+                <div class="modal-card modal-card-lg" role="document">
+                    <div class="modal-head">
+                        <h2 id="automator-subs-h" class="panel-title">
+                            <span class="panel-emoji" aria-hidden="true">&#127908;</span>
+                            <span id="automator-subs-title">Lyrics review</span>
+                        </h2>
+                        <button class="btn btn-ghost btn-sm" type="button" data-modal-close aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="hint" id="automator-subs-progress">Looking up lyrics on LRCLIB…</p>
+                        <div class="subs-toolbar" style="display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.75rem;">
+                            <button class="btn btn-ghost btn-sm" id="automator-subs-all-subs" type="button" disabled>Use all matched lyrics</button>
+                            <button class="btn btn-ghost btn-sm" id="automator-subs-all-whisper" type="button" disabled>Use all Whisper</button>
+                        </div>
+                        <ol id="automator-subs-list" class="subs-list"></ol>
+                    </div>
+                    <div class="modal-foot" style="display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+                        <span class="muted small" id="automator-subs-count">&nbsp;</span>
+                        <div style="display:flex; gap:.5rem;">
+                            <button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>
+                            <button class="btn btn-primary" id="automator-subs-go" type="button" disabled>Approve &amp; start jobs</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual LRCLIB search modal (per-track, opened from lyrics review) -->
+            <div class="modal" id="automator-manual-search-modal" role="dialog" aria-modal="true" aria-labelledby="manual-search-h" hidden>
+                <div class="modal-backdrop" data-modal-close></div>
+                <div class="modal-card" role="document">
+                    <div class="modal-head">
+                        <h2 id="manual-search-h" class="panel-title">
+                            <span class="panel-emoji" aria-hidden="true">&#128269;</span>
+                            Manual LRCLIB search
+                        </h2>
+                        <button class="btn btn-ghost btn-sm" type="button" data-modal-close aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="hint" id="manual-search-status">Type a query, then press Search LRCLIB.</p>
+                        <div class="form-row">
+                            <label for="manual-search-artist">Artist</label>
+                            <input type="text" id="manual-search-artist" placeholder="e.g. BTS" autocomplete="off">
+                        </div>
+                        <div class="form-row">
+                            <label for="manual-search-title">Title</label>
+                            <input type="text" id="manual-search-title" placeholder="e.g. Butterfly" autocomplete="off">
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:.5rem; margin-bottom:.75rem;">
+                            <button class="btn btn-primary btn-sm" id="manual-search-go" type="button">Search LRCLIB</button>
+                        </div>
+                        <div id="manual-search-results" class="manual-search-results"></div>
+                    </div>
+                    <div class="modal-foot" style="display:flex; justify-content:flex-end; gap:.5rem;">
+                        <button class="btn btn-ghost" type="button" data-modal-close>Close</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if active_tab in ['gallery', 'discover'] %}
+        <!-- Shared download progress belongs with Library and Discover. -->
+        <section class="card panel" aria-labelledby="jobs-h">
+            <div class="panel-head">
+                <h2 id="jobs-h" class="panel-title">
+                    <span class="panel-emoji" aria-hidden="true">&#9889;</span>
+                    Active downloads
+                    <span id="jobs-count" class="panel-badge">0</span>
+                </h2>
+                <label class="checkbox-row show-completed-toggle">
+                    <input type="checkbox" id="show-completed">
+                    <span>Show completed</span>
+                </label>
+            </div>
+            <div id="jobs-list" class="jobs-list"></div>
+        </section>
+        {% endif %}
+
+        {% if active_tab == 'repair' %}
+        <!-- REPAIR PAGE — scan music folder for broken .lrc files, fix via LRCLIB -->
+        <section class="panel" id="panel-repair">
+            <h2 class="panel-title">
+                <span class="panel-emoji" aria-hidden="true">&#129691;</span> Repair lyrics files
+            </h2>
+            <p class="panel-desc">
+                Walks your configured music folder, finds every MP3 + sibling .lrc pair, and flags
+                .lrc files that look broken &mdash; placeholder content like <code>[00:00.00]Lyrics unavailable</code>,
+                near-empty files, or files with no timestamp lines. Click <strong>Repair</strong> on a row
+                to re-fetch from <strong>LRCLIB</strong> using the MP3's ID3 tags and overwrite the .lrc.
+            </p>
+            <div class="row controls" style="gap:.5rem; flex-wrap:wrap;">
+                <button class="btn btn-primary" type="button" id="repair-scan-btn">Scan music folder</button>
+                <button class="btn btn-ghost" type="button" id="repair-bulk-fix-btn" disabled>Repair selected</button>
+                <span id="repair-summary" class="muted small"></span>
+            </div>
+            <div id="repair-folder-line" class="hint" style="margin-top:.25rem;">&nbsp;</div>
+            <div id="repair-results" class="repair-results" style="margin-top:1rem;"></div>
+
+            <!-- ─── Deduper sub-panel ──────────────────────────────────── -->
+            <details class="dedupe-panel" id="repair-dedupe-panel" style="margin-top:1.5rem;">
+                <summary>
+                    <span class="panel-emoji" aria-hidden="true">&#128260;</span>
+                    <strong>Deduper</strong>
+                    <span class="muted small">&mdash; flag duplicate songs within each album</span>
+                </summary>
+                <div class="row controls" style="gap:.5rem; flex-wrap:wrap; margin-top:.5rem;">
+                    <button class="btn btn-primary" type="button" id="dedupe-scan-btn">Scan for duplicate songs</button>
+                    <span id="dedupe-summary" class="muted small">&nbsp;</span>
+                </div>
+                <div id="dedupe-folder-line" class="hint" style="margin-top:.25rem;">&nbsp;</div>
+                <div id="dedupe-results" style="margin-top:.75rem;"></div>
+            </details>
+
+            <!-- ─── Renamer sub-panel ──────────────────────────────────── -->
+            <details class="rename-panel" id="repair-rename-panel" style="margin-top:1.5rem;">
+                <summary>
+                    <span class="panel-emoji" aria-hidden="true">&#128221;</span>
+                    <strong>Renamer</strong>
+                    <span class="muted small">&mdash; fix misnamed files using ID3 tags and re-number duplicate track positions</span>
+                </summary>
+                <div class="row controls" style="gap:.5rem; flex-wrap:wrap; margin-top:.5rem;">
+                    <button class="btn btn-primary" type="button" id="rename-scan-btn">Scan for renames</button>
+                    <button class="btn btn-ghost" type="button" id="rename-apply-all-btn" disabled>Apply all approved</button>
+                    <span id="rename-summary" class="muted small">&nbsp;</span>
+                </div>
+                <div id="rename-folder-line" class="hint" style="margin-top:.25rem;">&nbsp;</div>
+                <div id="rename-results" style="margin-top:.75rem;"></div>
+            </details>
+        </section>
+
+        <!-- ─── Manual lyrics modal ──────────────────────────────────── -->
+        <div class="modal" id="repair-manual-modal" role="dialog" aria-modal="true" aria-labelledby="repair-manual-h" hidden>
+            <div class="modal-backdrop" data-modal-close></div>
+            <div class="modal-card modal-card-lg" role="document">
+                <div class="modal-head">
+                    <h2 id="repair-manual-h" class="panel-title">
+                        <span class="panel-emoji" aria-hidden="true">&#127908;</span> Manual lyrics
+                    </h2>
+                    <button class="btn btn-ghost btn-sm" type="button" data-modal-close aria-label="Close">&times;</button>
+                </div>
+                <div class="row controls" style="gap:.25rem; border-bottom:1px solid var(--border); margin-bottom:.5rem;">
+                    <button type="button" class="btn btn-sm btn-ghost is-active" data-manual-tab="paste">Paste</button>
+                    <button type="button" class="btn btn-sm btn-ghost" data-manual-tab="upload">Upload</button>
+                    <button type="button" class="btn btn-sm btn-ghost" data-manual-tab="search">Manual search</button>
+                </div>
+
+                <div id="manual-pane-paste" class="manual-pane">
+                    <p class="hint">Paste the full .lrc content below. A leading <code>; source: paste</code> comment is added automatically so future scans know where these lyrics came from.</p>
+                    <textarea id="manual-paste-text" rows="12" class="input" placeholder="[00:00.00] Lyric line one
+[00:05.00] Lyric line two"></textarea>
+                    <div class="row controls" style="justify-content:flex-end; margin-top:.5rem;">
+                        <button class="btn btn-primary" type="button" id="manual-paste-save">Save lyrics</button>
+                    </div>
+                </div>
+
+                <div id="manual-pane-upload" class="manual-pane" hidden>
+                    <p class="hint">Pick a <code>.lrc</code> (or any text) file from your computer.</p>
+                    <input type="file" id="manual-upload-file" accept=".lrc,text/plain">
+                    <div id="manual-upload-info" class="muted small" style="margin-top:.25rem;">&nbsp;</div>
+                    <div class="row controls" style="justify-content:flex-end; margin-top:.5rem;">
+                        <button class="btn btn-primary" type="button" id="manual-upload-save" disabled>Save lyrics</button>
+                    </div>
+                </div>
+
+                <div id="manual-pane-search" class="manual-pane" hidden>
+                    <p class="hint">Free-text search LRCLIB directly. Useful when the ID3 tags don't match LRCLIB's records.</p>
+                    <div class="row controls" style="gap:.5rem;">
+                        <input type="text" id="manual-search-q" class="input" style="flex:1;" placeholder="artist + title, e.g. kenny rogers lady">
+                        <button class="btn btn-primary" type="button" id="manual-search-btn">Search</button>
+                    </div>
+                    <div id="manual-search-results" style="margin-top:.5rem; max-height: 280px; overflow-y: auto;"></div>
+                    <div class="row controls" style="justify-content:flex-end; margin-top:.5rem;">
+                        <button class="btn btn-primary" type="button" id="manual-search-save" disabled>Save selected</button>
+                    </div>
+                </div>
+
+                <div id="manual-feedback" class="muted small" style="margin-top:.5rem;"></div>
+            </div>
+        </div>
+
+        {% endif %}
+
+        {% if active_tab in ['gallery', 'discover'] %}
+        <!-- Downloaded files stay near the download queue. -->
+        <section class="card panel" aria-labelledby="files-h">
+            <h2 id="files-h" class="panel-title">
+                <span class="panel-emoji" aria-hidden="true">&#128190;</span>
+                Downloaded files
+            </h2>
+            <div id="files-list" class="files-list">
+                <p class="muted small">No MP3s yet.</p>
+            </div>
+        </section>
+        {% endif %}
+    </main>
+
+    <footer class="site-footer">
+        <p class="muted small">Audio retrieval via yt-dlp and system FFmpeg. Catalog and chart data come from the providers described in the project docs.</p>
+    </footer>
+
+    <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
+    <script src="/static/a11y.js?v=2026-10-13-ui" defer></script>
+    <script src="/static/app.js?v=2026-10-13-ui" defer></script>
+    <script src="/static/automator.js?v=2026-10-13-ui" defer></script>
+    <script src="/static/repair.js?v=2026-10-13-ui" defer></script>
+    {% if active_tab == 'discover' %}<script src="/static/discover.js?v=2026-10-13-ui" defer></script>{% endif %}
+</body>
+</html>
