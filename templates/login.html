@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#11120f">
+    <title>Sign in · Sleeve</title>
+    <link rel="icon" type="image/png" href="/static/sleeve-mark.png">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/login.css">
+</head>
+<body class="login-page">
+    <main class="login-shell">
+        <a class="login-brand" href="/login" aria-label="Sleeve sign in">
+            <img src="/static/sleeve-mark.png" alt="" width="42" height="42">
+            <span>sleeve<span class="brand-period">.</span></span>
+        </a>
+        <section class="login-card" aria-labelledby="login-title">
+            <div class="login-overline"><span class="login-dot" aria-hidden="true"></span> YOUR MUSIC LIBRARY</div>
+            <h1 id="login-title">Sign in with Jellyfin</h1>
+            <p class="login-intro">Use your Jellyfin administrator account to continue to Sleeve.</p>
+            <form id="jellyfin-login-form" novalidate>
+                {% if server_url %}
+                <div class="login-server">
+                    <span class="login-label">JELLYFIN SERVER</span>
+                    <strong>{{ server_url }}</strong>
+                    <input type="hidden" id="login-server-url" value="{{ server_url }}">
+                </div>
+                {% else %}
+                <label class="login-field" for="login-server-url">
+                    <span>Jellyfin server address</span>
+                    <input id="login-server-url" type="url" autocomplete="url" placeholder="http://jellyfin.local:8096" required>
+                </label>
+                {% endif %}
+                <label class="login-field" for="login-username">
+                    <span>Username</span>
+                    <input id="login-username" type="text" autocomplete="username" required autofocus>
+                </label>
+                <label class="login-field" for="login-password">
+                    <span>Password</span>
+                    <input id="login-password" type="password" autocomplete="current-password" required>
+                </label>
+                <p class="login-error" id="login-error" role="alert" hidden></p>
+                <button class="login-submit" type="submit" id="login-submit">
+                    <span>Continue to Sleeve</span><span aria-hidden="true">&#8594;</span>
+                </button>
+                <p class="login-note">Credentials are checked by Jellyfin and are not saved by Sleeve.</p>
+                <input type="hidden" id="login-next" value="{{ next_path }}">
+            </form>
+        </section>
+        <p class="login-foot">One sign-in for the tools that keep your library in shape.</p>
+    </main>
+    <script src="/static/login.js" defer></script>
+</body>
+</html>

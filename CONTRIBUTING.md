@@ -12,8 +12,9 @@ Thanks for helping improve Sleeve. The project uses Python, FastAPI, Jinja templ
 
 - Keep backend behavior and existing API response shapes compatible unless a change is necessary and documented.
 - Prefer small functions and accessible semantic HTML. Keep page-specific browser behavior in its page script and shared behavior in `static/app.js`.
+- Keep Jellyfin credentials in `jellyfin_auth.py`; never send a Jellyfin access token to the browser.
 - Do not commit downloaded media, browser cookies, local profiles, or FFmpeg binaries.
-- Add or update focused tests for behavior changes. Run `python -m pytest` and `python -m compileall app.py app_paths.py automator.py providers.py` before submitting.
+- Add or update focused tests for behavior changes. Run `python -m pytest` and `python -m compileall app.py app_paths.py automator.py jellyfin_auth.py providers.py` before submitting.
 - Describe user-facing changes and any setup changes in the pull request.
 
 ## Pull requests

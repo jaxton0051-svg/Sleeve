@@ -21,6 +21,7 @@ import traceback
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -29,7 +30,7 @@ from bs4 import BeautifulSoup
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from app_paths import DATA_DIR, data_file
@@ -87,6 +88,7 @@ _ITUNES_TIMEOUT = 25  # seconds, used for every itunes.* call below
 
 
 import automator  # AUTOMATOR tab: Jellyfin client + per-album worker
+import jellyfin_auth
 from cookie_cleaner import ensure_cookie_file_valid  # self-healing cookie file
 
 # ---------------------------------------------------------------- paths
@@ -198,6 +200,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Sleeve", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_jellyfin_admin(request: Request, call_next):
+    """Require a signed-in Jellyfin administrator for every app route."""
+    path = request.url.path
+    public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/logout"}
+    if path in public_paths or path.startswith("/static/"):
+        return await call_next(request)
+
+    user = jellyfin_auth.get_session(request.cookies.get(jellyfin_auth.SESSION_COOKIE))
+    if not user:
+        if path.startswith("/api/"):
+            return JSONResponse({"ok": False, "error": "Sign in with your Jellyfin administrator account to continue."}, status_code=401)
+        destination = request.url.path
+        if request.url.query:
+            destination += "?" + request.url.query
+        return RedirectResponse("/login?next=" + quote(destination, safe="/"), status_code=303)
+
+    request.state.jellyfin_user = user
+    return await call_next(request)
 
 
 class _NoCacheStaticFiles(StaticFiles):
@@ -1328,6 +1351,78 @@ def index_root(request: Request):
     bookmarks to the old Songs home page."""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/gallery", status_code=301)
+
+
+@app.get("/login")
+def login_page(request: Request, next: str = Query("/gallery")):
+    user = jellyfin_auth.get_session(request.cookies.get(jellyfin_auth.SESSION_COOKIE))
+    if user:
+        return RedirectResponse("/gallery", status_code=303)
+    profile = automator.load_profile()
+    parsed_next = urlsplit(next)
+    safe_next = (next if next.startswith("/") and not next.startswith("//")
+                 and "\\" not in next and not parsed_next.scheme and not parsed_next.netloc
+                 else "/gallery")
+    return templates.TemplateResponse(request, "login.html", {
+        "server_url": jellyfin_auth.configured_server_url(profile.jellyfin_url),
+        "next_path": safe_next,
+    })
+
+
+@app.post("/api/auth/login")
+async def api_auth_login(request: Request):
+    client_key = request.client.host if request.client else "unknown"
+    if jellyfin_auth.login_is_limited(client_key):
+        return JSONResponse({"ok": False, "error": "Too many attempts. Wait a minute, then try again."}, status_code=429)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    profile = automator.load_profile()
+    server_url = jellyfin_auth.configured_server_url(profile.jellyfin_url)
+    if not server_url:
+        try:
+            server_url = jellyfin_auth.validate_server_url(str(body.get("server_url") or ""))
+        except jellyfin_auth.JellyfinLoginError as exc:
+            jellyfin_auth.record_failed_login(client_key)
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        user = jellyfin_auth.authenticate_admin(
+            server_url,
+            str(body.get("username") or ""),
+            str(body.get("password") or ""),
+        )
+    except jellyfin_auth.JellyfinLoginError as exc:
+        jellyfin_auth.record_failed_login(client_key)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=401)
+
+    try:
+        jellyfin_auth.save_server_url(server_url)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save the Jellyfin server address to app data."}, status_code=500)
+    jellyfin_auth.clear_failed_logins(client_key)
+    session_id = jellyfin_auth.create_session(user)
+    response = JSONResponse({"ok": True, "username": user["username"]})
+    secure_cookie = request.url.scheme == "https" or os.environ.get("SLEEVE_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
+    response.set_cookie(
+        jellyfin_auth.SESSION_COOKIE,
+        session_id,
+        max_age=jellyfin_auth.SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@app.get("/logout")
+def logout(request: Request):
+    jellyfin_auth.delete_session(request.cookies.get(jellyfin_auth.SESSION_COOKIE))
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(jellyfin_auth.SESSION_COOKIE, path="/")
+    return response
 
 
 @app.get("/gallery")

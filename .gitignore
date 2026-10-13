@@ -10,6 +10,7 @@ __pycache__/
 .env.*
 !.env.example
 automator_profile.json
+jellyfin_auth.json
 cookie.txt
 cookies.txt
 *.sqlite

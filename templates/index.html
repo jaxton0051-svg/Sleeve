@@ -31,16 +31,23 @@
                 Repair
             </a>
         </div>
+        <div class="topnav-account">
+            <span class="nav-user" aria-label="Signed in as {{ request.state.jellyfin_user.username }}">{{ request.state.jellyfin_user.username }}</span>
+            <a class="nav-logout" href="/logout">Sign out</a>
+        </div>
     </nav>
 
     <header class="page-header">
         <div class="header-inner">
             <h1 class="page-title">
                 {% if active_tab == 'automator' %}Automator
-                {% elif active_tab == 'repair' %}Repair
+                {% elif active_tab == 'repair' %}Keep your library in shape
                 {% elif active_tab == 'discover' %}Discover
                 {% else %}Your library{% endif %}
             </h1>
+            {% if active_tab == 'repair' %}
+            <p class="page-intro">Tidy lyrics, remove duplicate tracks, and bring file names back in line.</p>
+            {% endif %}
             <p class="source-line" id="src">&nbsp;</p>
         </div>
     </header>
@@ -432,54 +439,54 @@
 
         {% if active_tab == 'repair' %}
         <!-- REPAIR PAGE — scan music folder for broken .lrc files, fix via LRCLIB -->
-        <section class="panel" id="panel-repair">
-            <h2 class="panel-title">
-                <span class="panel-emoji" aria-hidden="true">&#129691;</span> Repair lyrics files
-            </h2>
-            <p class="panel-desc">
-                Walks your configured music folder, finds every MP3 + sibling .lrc pair, and flags
-                .lrc files that look broken &mdash; placeholder content like <code>[00:00.00]Lyrics unavailable</code>,
-                near-empty files, or files with no timestamp lines. Click <strong>Repair</strong> on a row
-                to re-fetch from <strong>LRCLIB</strong> using the MP3's ID3 tags and overwrite the .lrc.
-            </p>
-            <div class="row controls" style="gap:.5rem; flex-wrap:wrap;">
-                <button class="btn btn-primary" type="button" id="repair-scan-btn">Scan music folder</button>
-                <button class="btn btn-ghost" type="button" id="repair-bulk-fix-btn" disabled>Repair selected</button>
-                <span id="repair-summary" class="muted small"></span>
+        <section class="repair-workspace" id="panel-repair" aria-label="Music library repair tools">
+            <div class="repair-tabs" role="tablist" aria-label="Repair tools">
+                <button class="repair-tab is-active" id="repair-tab-lyrics" type="button" role="tab" aria-selected="true" aria-controls="repair-tool-lyrics" tabindex="0">
+                    <span class="repair-tab-index">01</span><span><strong>Lyrics</strong><small>Fix missing or broken LRC files</small></span>
+                </button>
+                <button class="repair-tab" id="repair-tab-duplicates" type="button" role="tab" aria-selected="false" aria-controls="repair-tool-duplicates" tabindex="-1">
+                    <span class="repair-tab-index">02</span><span><strong>Duplicates</strong><small>Review repeated tracks</small></span>
+                </button>
+                <button class="repair-tab" id="repair-tab-names" type="button" role="tab" aria-selected="false" aria-controls="repair-tool-names" tabindex="-1">
+                    <span class="repair-tab-index">03</span><span><strong>File names</strong><small>Correct titles and track numbers</small></span>
+                </button>
             </div>
-            <div id="repair-folder-line" class="hint" style="margin-top:.25rem;">&nbsp;</div>
-            <div id="repair-results" class="repair-results" style="margin-top:1rem;"></div>
 
-            <!-- ─── Deduper sub-panel ──────────────────────────────────── -->
-            <details class="dedupe-panel" id="repair-dedupe-panel" style="margin-top:1.5rem;">
-                <summary>
-                    <span class="panel-emoji" aria-hidden="true">&#128260;</span>
-                    <strong>Deduper</strong>
-                    <span class="muted small">&mdash; flag duplicate songs within each album</span>
-                </summary>
-                <div class="row controls" style="gap:.5rem; flex-wrap:wrap; margin-top:.5rem;">
-                    <button class="btn btn-primary" type="button" id="dedupe-scan-btn">Scan for duplicate songs</button>
-                    <span id="dedupe-summary" class="muted small">&nbsp;</span>
+            <section class="repair-tool-panel" id="repair-tool-lyrics" role="tabpanel" aria-labelledby="repair-tab-lyrics" tabindex="0">
+                <div class="repair-tool-heading">
+                    <div><p class="repair-eyebrow">LYRIC CHECK</p><h2>Find lyrics that need attention</h2>
+                        <p>Scan the configured music folder for empty, incomplete, or placeholder LRC files.</p></div>
+                    <div class="repair-tool-actions">
+                        <button class="btn btn-primary" type="button" id="repair-scan-btn">Scan library</button>
+                        <button class="btn btn-ghost" type="button" id="repair-bulk-fix-btn" disabled>Repair selected</button>
+                    </div>
                 </div>
-                <div id="dedupe-folder-line" class="hint" style="margin-top:.25rem;">&nbsp;</div>
-                <div id="dedupe-results" style="margin-top:.75rem;"></div>
-            </details>
+                <div class="repair-status-line"><span id="repair-summary" class="muted small" role="status" aria-live="polite"></span><span id="repair-folder-line" class="hint"></span></div>
+                <div id="repair-results" class="repair-results"></div>
+            </section>
 
-            <!-- ─── Renamer sub-panel ──────────────────────────────────── -->
-            <details class="rename-panel" id="repair-rename-panel" style="margin-top:1.5rem;">
-                <summary>
-                    <span class="panel-emoji" aria-hidden="true">&#128221;</span>
-                    <strong>Renamer</strong>
-                    <span class="muted small">&mdash; fix misnamed files using ID3 tags and re-number duplicate track positions</span>
-                </summary>
-                <div class="row controls" style="gap:.5rem; flex-wrap:wrap; margin-top:.5rem;">
-                    <button class="btn btn-primary" type="button" id="rename-scan-btn">Scan for renames</button>
-                    <button class="btn btn-ghost" type="button" id="rename-apply-all-btn" disabled>Apply all approved</button>
-                    <span id="rename-summary" class="muted small">&nbsp;</span>
+            <section class="repair-tool-panel" id="repair-tool-duplicates" role="tabpanel" aria-labelledby="repair-tab-duplicates" tabindex="0" hidden>
+                <div class="repair-tool-heading">
+                    <div><p class="repair-eyebrow">COLLECTION CLEANUP</p><h2>Review duplicate tracks</h2>
+                        <p>Compare repeated songs inside each album. Selected files move to the Recycle Bin.</p></div>
+                    <div class="repair-tool-actions"><button class="btn btn-primary" type="button" id="dedupe-scan-btn">Scan duplicates</button></div>
                 </div>
-                <div id="rename-folder-line" class="hint" style="margin-top:.25rem;">&nbsp;</div>
-                <div id="rename-results" style="margin-top:.75rem;"></div>
-            </details>
+                <div class="repair-status-line"><span id="dedupe-summary" class="muted small" role="status" aria-live="polite"></span><span id="dedupe-folder-line" class="hint"></span></div>
+                <div id="dedupe-results"></div>
+            </section>
+
+            <section class="repair-tool-panel" id="repair-tool-names" role="tabpanel" aria-labelledby="repair-tab-names" tabindex="0" hidden>
+                <div class="repair-tool-heading">
+                    <div><p class="repair-eyebrow">FILE ORGANIZATION</p><h2>Bring file names into line</h2>
+                        <p>Compare names with embedded music tags, then review every proposed change before applying it.</p></div>
+                    <div class="repair-tool-actions">
+                        <button class="btn btn-primary" type="button" id="rename-scan-btn">Scan file names</button>
+                        <button class="btn btn-ghost" type="button" id="rename-apply-all-btn" disabled>Apply approved</button>
+                    </div>
+                </div>
+                <div class="repair-status-line"><span id="rename-summary" class="muted small" role="status" aria-live="polite"></span><span id="rename-folder-line" class="hint"></span></div>
+                <div id="rename-results"></div>
+            </section>
         </section>
 
         <!-- ─── Manual lyrics modal ──────────────────────────────────── -->

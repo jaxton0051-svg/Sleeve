@@ -2406,6 +2406,8 @@ a:hover, a:focus-visible { color: var(--accent-hover); }
 .topnav-brand { font-size: 15px; letter-spacing: -.04em; }
 .topnav-brand .brand-mark { width: 38px; height: 38px; border-radius: 13px; color: var(--accent-fg); background: var(--accent); box-shadow: none; font-size: 19px; }
 .topnav-links { gap: 3px; padding: 4px; border: 0; border-radius: 14px; background: #20211c; }
+.topnav-account { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; margin-left: auto; }
+.nav-user { display: inline-flex; min-height: 38px; max-width: 180px; align-items: center; overflow: hidden; padding: 0 10px; color: var(--fg-muted); font-size: 12px; font-weight: 400; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .topnav-link { min-height: 42px; padding: 8px 15px; color: #aaa99c; border-radius: 11px; font-weight: 600; }
 .topnav-link:hover { color: var(--fg); background: #2b2c26; }
 .topnav-link.is-active, .topnav-link.is-active:hover { color: var(--accent); background: #303426; box-shadow: inset 0 0 0 1px #414632; }
@@ -2637,6 +2639,8 @@ option { color: var(--fg); background: var(--bg-elevated); }
 }
 @media (max-width: 760px) {
     .topnav { gap: 5px; }
+    .topnav-account { align-self: flex-end; }
+    .nav-user { min-height: 36px; }
     .topnav-links { gap: 18px; }
     .topnav-link { min-height: 42px; }
     .header-inner { padding-top: 26px; }
@@ -2654,4 +2658,83 @@ option { color: var(--fg); background: var(--bg-elevated); }
     .album-actions .btn { width: 100%; font-size: 11px; }
     .album-card .album-card-actions { grid-template-columns: 1fr; gap: 5px; }
     .album-card .album-preview-btn, .album-card .album-add-btn { min-height: 34px; }
+}
+
+/* Repair workspace: quiet navigation, clear actions, and scan results that
+   read like a library list instead of nested settings panels. */
+body[data-active-tab="repair"] .page-header { background: #151611; border-color: var(--border); }
+body[data-active-tab="repair"] .header-inner { padding-top: clamp(34px, 6vw, 68px); padding-bottom: 28px; }
+body[data-active-tab="repair"] .page-title { max-width: 780px; font-size: clamp(34px, 5.2vw, 58px); line-height: 1.02; letter-spacing: -.055em; }
+.page-intro { max-width: 620px; margin-top: 13px; color: var(--fg-muted); font-size: 15px; }
+body[data-active-tab="repair"] .source-line { display: none; }
+.repair-workspace { width: 100%; }
+.repair-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.repair-tab {
+    display: flex; min-width: 0; min-height: 78px; align-items: center; gap: 14px;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: 9px;
+    background: #191a16; color: var(--fg); text-align: left; cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+.repair-tab:hover { border-color: #55584a; background: #20211b; }
+.repair-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.repair-tab.is-active { border-color: #626a43; background: #21241b; box-shadow: inset 0 -2px var(--accent); }
+.repair-tab-index { color: var(--accent); font: 650 11px/1 var(--font-mono); }
+.repair-tab strong, .repair-tab small { display: block; }
+.repair-tab strong { font-size: 14px; font-weight: 680; }
+.repair-tab small { margin-top: 3px; color: var(--fg-muted); font-size: 11px; line-height: 1.35; }
+.repair-tool-panel { min-width: 0; padding-top: 30px; }
+.repair-tool-panel[hidden] { display: none; }
+.repair-tool-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.repair-tool-heading > div:first-child { min-width: 0; }
+.repair-eyebrow { margin-bottom: 7px; color: var(--accent); font: 650 10px/1.2 var(--font-mono); letter-spacing: .12em; }
+.repair-tool-heading h2 { font-size: clamp(20px, 2.3vw, 27px); letter-spacing: -.04em; }
+.repair-tool-heading p:not(.repair-eyebrow) { max-width: 620px; margin-top: 6px; color: var(--fg-muted); font-size: 13px; }
+.repair-tool-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.repair-tool-actions .btn { min-height: 42px; padding-inline: 15px; }
+.repair-status-line { display: flex; min-height: 26px; align-items: center; justify-content: space-between; gap: 10px; margin-top: 22px; }
+.repair-status-line .hint { min-width: 0; overflow: hidden; color: var(--fg-soft); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.repair-status-line:empty { display: none; }
+.repair-results, #dedupe-results, #rename-results { margin-top: 14px; }
+.repair-list { display: grid; gap: 7px; border: 0; }
+.repair-row { grid-template-columns: 28px minmax(0, 1fr) minmax(150px, auto); gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: #191a16; }
+.repair-row:hover { background: #20211b; }
+.repair-row-title { font-size: 14px; }
+.repair-row-path, .repair-row-meta { overflow-wrap: anywhere; font-size: 11px; }
+.repair-row-meta { margin-top: 3px; }
+.repair-row-action { max-width: 220px; }
+.repair-row-action .btn { min-height: 35px; padding-inline: 10px; }
+.repair-badge { padding: 4px 8px; font-size: 9px; letter-spacing: .08em; }
+.repair-badge-broken, .repair-badge-error { color: #ffb1a9; background: #442723; }
+.repair-badge-nolrc { color: #c2d0ff; background: #272d42; }
+.repair-badge-healthy { color: #b9e9b3; background: #223324; }
+.repair-error { color: #f1b9b1; border-color: #67403a; border-radius: 8px; background: #241a18; }
+.repair-tool-panel > [id$="-results"] > .muted,
+.repair-tool-panel > .repair-results > .muted { padding: 22px 0; color: var(--fg-muted); border-top: 1px solid var(--border); }
+.repair-tool-panel .dedupe-album { margin-top: 20px; }
+.repair-tool-panel .dedupe-album-head { margin-bottom: 8px; color: var(--fg-muted); font-size: 12px; font-weight: 650; }
+.repair-tool-panel .dedupe-group { margin-bottom: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: #191a16; }
+.repair-tool-panel .dedupe-group-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 12px; }
+.repair-tool-panel .dedupe-song { border-color: var(--border); }
+.repair-tool-panel .rename-section { margin-top: 18px; }
+.repair-tool-panel .rename-section-head { margin-bottom: 9px; font-size: 15px; }
+.repair-tool-panel .rename-row, .repair-tool-panel .rename-album { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #191a16; }
+
+@media (max-width: 760px) {
+    .repair-tabs { gap: 7px; }
+    .repair-tab { min-height: 74px; gap: 9px; padding: 11px 10px; }
+    .repair-tab small { font-size: 10px; }
+    .repair-tool-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
+    .repair-tool-actions { width: 100%; justify-content: flex-start; }
+    .repair-status-line { align-items: flex-start; flex-direction: column; gap: 4px; }
+    .repair-status-line .hint { white-space: normal; overflow-wrap: anywhere; }
+    .repair-row { grid-template-columns: 24px minmax(0, 1fr); }
+    .repair-row-action { grid-column: 2; max-width: none; justify-content: flex-start; }
+    .repair-row-status { text-align: left; }
+}
+@media (max-width: 480px) {
+    .repair-tabs { grid-template-columns: 1fr; }
+    .repair-tab { min-height: 60px; }
+    .repair-tool-panel { padding-top: 24px; }
+    .repair-tool-actions .btn { flex: 1 1 auto; }
+    .repair-row { padding: 12px 10px; }
 }

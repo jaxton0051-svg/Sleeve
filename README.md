@@ -23,7 +23,7 @@ python -m pip install -r requirements.txt
 python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
 
-Visit <http://127.0.0.1:5000>. Keep the service bound to localhost unless you add an appropriate authentication and network-security layer; the app does not provide user login.
+Visit <http://127.0.0.1:5000> and sign in with a Jellyfin administrator account. For remote access, place Sleeve behind HTTPS; see the [setup guide](docs/SETUP.md).
 
 ## Project guide
 
@@ -35,4 +35,4 @@ The frontend uses plain JavaScript and CSS, with no package manager or build ste
 
 ## Local data and privacy
 
-The app writes browser cookies, Jellyfin settings/API keys, caches, temporary audio, and downloads to the per-user data directory (see [Setup](docs/SETUP.md)). Existing root-level settings are copied on first run and left untouched. `.gitignore` also excludes legacy local files. Review `git status` before sharing a checkout, and never publish `.env`, `automator_profile.json`, `cookie.txt`, or `cookies.txt`.
+The app writes browser cookies, Jellyfin settings/API keys, sign-in server address, caches, temporary audio, and downloads to the per-user data directory (see [Setup](docs/SETUP.md)). Login passwords and Jellyfin access tokens are not stored. Existing root-level settings are copied on first run and left untouched. `.gitignore` also excludes legacy local files. Review `git status` before sharing a checkout, and never publish `.env`, `automator_profile.json`, `cookie.txt`, or `cookies.txt`.

@@ -63,6 +63,7 @@
     // ----------------------------- entry -----------------------------
 
     function initRepairPage() {
+        bindRepairTabs();
         const scanBtn = $("#repair-scan-btn");
         if (scanBtn && !scanBtn.dataset.wired) {
             scanBtn.dataset.wired = "1";
@@ -77,6 +78,37 @@
         bindDedupe();
         bindRenamer();
         wireModalDismissers();
+    }
+
+    function bindRepairTabs() {
+        const tabs = $$(".repair-tab[role='tab']");
+        if (!tabs.length || tabs[0].dataset.wired) return;
+        tabs.forEach((tab, index) => {
+            tab.dataset.wired = "1";
+            tab.addEventListener("click", () => activateRepairTab(tab));
+            tab.addEventListener("keydown", (event) => {
+                let next = null;
+                if (event.key === "ArrowRight" || event.key === "ArrowDown") next = tabs[(index + 1) % tabs.length];
+                if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = tabs[(index - 1 + tabs.length) % tabs.length];
+                if (event.key === "Home") next = tabs[0];
+                if (event.key === "End") next = tabs[tabs.length - 1];
+                if (!next) return;
+                event.preventDefault();
+                activateRepairTab(next);
+                next.focus();
+            });
+        });
+    }
+
+    function activateRepairTab(active) {
+        $$(".repair-tab[role='tab']").forEach((tab) => {
+            const selected = tab === active;
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+            tab.classList.toggle("is-active", selected);
+            const panel = $("#" + tab.getAttribute("aria-controls"));
+            if (panel) panel.hidden = !selected;
+        });
     }
 
     // Close any open modal when its [data-modal-close] trigger is clicked.

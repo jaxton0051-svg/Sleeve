@@ -9,8 +9,11 @@
 - `automator.py` contains Jellyfin integration, download verification/tagging, lyric lookup/transcription, and library repair operations.
 - `cookie_cleaner.py` normalizes exported browser cookie files. `requirements.txt` lists the runtime Python dependencies.
 - `app_paths.py` selects the per-user data directory and migrates legacy local files by copying them once; the source checkout remains the code/config template location.
+- `jellyfin_auth.py` checks Jellyfin administrator credentials and keeps random, expiring web sessions in process memory. The browser cookie contains no Jellyfin access token.
 
 The browser calls the existing JSON endpoints directly. Keep DOM IDs consumed by the page scripts and response shapes consumed by those scripts aligned when changing a workflow. Static assets are served with revalidation headers; update the asset version in the template when cache behavior changes.
+
+All application pages and APIs require an active Jellyfin administrator session. The login route and static files are public. Sessions expire after 12 hours or when the server restarts; the default deployment is one Uvicorn process. Jellyfin's administrator API key remains server-side in the Automator profile for library operations.
 
 ## External services and attribution
 

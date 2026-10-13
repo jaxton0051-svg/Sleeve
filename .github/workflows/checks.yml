@@ -16,4 +16,4 @@ jobs:
           cache-dependency-path: requirements*.txt
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest -q
-      - run: python -m compileall -q app.py app_paths.py automator.py providers.py yt_manager.py yt_tools.py musictool.py jfile.py
+      - run: python -m compileall -q app.py app_paths.py automator.py jellyfin_auth.py providers.py yt_manager.py yt_tools.py musictool.py jfile.py
