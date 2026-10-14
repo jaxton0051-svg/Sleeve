@@ -163,6 +163,15 @@ def _resolve_discover_providers() -> list[str]:
     return [n for n in requested if n in {p.name for p in enabled_providers()}]
 
 
+def _resolve_tracklist_providers() -> list[str]:
+    """Return enabled providers in the configured album-track fallback order."""
+    requested = _discover_settings.get("track_providers") or []
+    available = [p.name for p in enabled_providers()]
+    if not requested or "all" in requested:
+        return available
+    return [name for name in requested if name in available]
+
+
 # ---------------------------------------------------------------- .env loading + providers
 #
 # Load optional secrets (Spotify Client Credentials, etc.) from .env before
@@ -206,7 +215,7 @@ app = FastAPI(title="Sleeve", lifespan=lifespan)
 async def require_jellyfin_admin(request: Request, call_next):
     """Require a signed-in Jellyfin administrator for every app route."""
     path = request.url.path
-    public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/logout"}
+    public_paths = {"/login", "/welcome", "/api/auth/login", "/api/auth/logout", "/logout"}
     if path in public_paths or path.startswith("/static/"):
         return await call_next(request)
 
@@ -217,7 +226,9 @@ async def require_jellyfin_admin(request: Request, call_next):
         destination = request.url.path
         if request.url.query:
             destination += "?" + request.url.query
-        return RedirectResponse("/login?next=" + quote(destination, safe="/"), status_code=303)
+        completed = automator.load_profile().setup_complete
+        entrypoint = "/login" if completed else "/welcome"
+        return RedirectResponse(entrypoint + "?next=" + quote(destination, safe="/"), status_code=303)
 
     request.state.jellyfin_user = user
     return await call_next(request)
@@ -355,15 +366,35 @@ def get_trending(force: bool = False) -> dict:
 # ---------------------------------------------------------------- albums
 
 _albums_cache: dict = {"at": None, "albums": [], "source": ""}
+_genre_albums_cache: dict[str, dict] = {}
+ALBUM_GENRES = {
+    "all": None,
+    "pop": 14,
+    "country": 6,
+    "rock": 21,
+    "hip-hop": 18,
+    "k-pop": 51,
+    "alternative": 20,
+}
+ALBUM_GENRE_LABELS = {
+    "all": "All genres",
+    "pop": "Pop",
+    "country": "Country",
+    "rock": "Rock",
+    "hip-hop": "Hip-Hop",
+    "k-pop": "K-pop",
+    "alternative": "Alternative",
+}
 
 FALLBACK_ALBUMS = [
     {"rank": 1, "title": "Sample Album", "artist": "Demo Artist", "artwork": ""},
 ]
 
 
-def _fetch_itunes_albums() -> list[dict]:
-    """Apple RSS Top Albums — no key needed."""
-    url = "https://itunes.apple.com/us/rss/topalbums/limit=50/json"
+def _fetch_itunes_albums(genre_id: int | None = None) -> list[dict]:
+    """Apple RSS Top Albums — no key needed; optionally scoped to a genre."""
+    genre_segment = f"/genre={genre_id}" if genre_id is not None else ""
+    url = f"https://itunes.apple.com/us/rss/topalbums/limit=50{genre_segment}/json"
     r = _ITUNES.get(url, timeout=_ITUNES_TIMEOUT)
     r.raise_for_status()
     entries = r.json()["feed"]["entry"]
@@ -377,6 +408,7 @@ def _fetch_itunes_albums() -> list[dict]:
             # bump 100x100bb → 600x600bb for crisper covers
             artwork = artwork.replace("100x100bb", "600x600bb").replace("100x100", "600x600")
         albums.append({
+            "id": (e.get("id") or {}).get("attributes", {}).get("im:id", ""),
             "rank": i,
             "title": e["im:name"]["label"],
             "artist": e["im:artist"]["label"],
@@ -385,8 +417,24 @@ def _fetch_itunes_albums() -> list[dict]:
     return albums
 
 
-def get_albums(force: bool = False) -> dict:
+def get_albums(force: bool = False, genre: str = "all") -> dict:
     """Return {albums, source, updated_at}. Cached 1h on disk + memory."""
+    genre = (genre or "all").strip().lower()
+    if genre not in ALBUM_GENRES:
+        raise ValueError("Unknown album genre.")
+    if genre != "all":
+        cached = _genre_albums_cache.get(genre)
+        if not force and cached and datetime.now() - cached["at"] < timedelta(hours=1):
+            return {key: value for key, value in cached.items() if key != "at"}
+        albums = _fetch_itunes_albums(ALBUM_GENRES[genre])
+        result = {
+            "albums": albums,
+            "source": f"iTunes Top Albums · {ALBUM_GENRE_LABELS[genre]}",
+            "updated_at": datetime.now().isoformat(),
+        }
+        _genre_albums_cache[genre] = {**result, "at": datetime.now()}
+        return result
+
     global _albums_cache
     if not force and _albums_cache["at"]:
         if datetime.now() - _albums_cache["at"] < timedelta(hours=1):
@@ -419,6 +467,105 @@ def get_albums(force: bool = False) -> dict:
     except Exception:
         pass
     return {"albums": albums, "source": source, "updated_at": at.isoformat()}
+
+
+def _annotate_albums_on_server(albums: list[dict]) -> list[dict]:
+    """Mark album and track matches against the configured Jellyfin library."""
+    if not albums:
+        return albums
+    profile = automator.load_profile()
+    if not profile.is_configured():
+        for album in albums:
+            album["alreadyOnServer"] = False
+            for track in album.get("tracks") or []:
+                track["trackAlreadyOnServer"] = False
+        return albums
+    try:
+        client = automator.JellyfinClient(profile.jellyfin_url, profile.jellyfin_api_key)
+        return automator.mark_already_on_server(albums, client)
+    except Exception as exc:
+        print(f"[discover] Jellyfin library match failed: {type(exc).__name__}: {exc}")
+        for album in albums:
+            album["alreadyOnServer"] = False
+            for track in album.get("tracks") or []:
+                track["trackAlreadyOnServer"] = False
+        return albums
+
+
+def _annotate_tracks_on_server(tracks: list[dict]) -> list[dict]:
+    """Annotate provider track results using Automator's Jellyfin matching."""
+    if not tracks:
+        return tracks
+    profile = automator.load_profile()
+    if not profile.is_configured():
+        for track in tracks:
+            track["trackAlreadyOnServer"] = False
+        return tracks
+    try:
+        client = automator.JellyfinClient(profile.jellyfin_url, profile.jellyfin_api_key)
+        server_tracks = client.get_recent_tracks(limit=5000)
+        signatures = {
+            automator._track_signature(track.get("artist", ""), track.get("title", ""),
+                                       int(track.get("duration_ms") or 0))
+            for track in server_tracks
+        }
+        title_artist_signatures = {
+            (automator.canonical(track.get("artist", "")), automator.canonical(track.get("title", "")))
+            for track in server_tracks
+        }
+        for track in tracks:
+            duration_ms = int(track.get("duration_ms") or 0)
+            signature = automator._track_signature(track.get("artist", ""), track.get("title", ""), duration_ms)
+            title_artist = (automator.canonical(track.get("artist", "")), automator.canonical(track.get("title", "")))
+            track["trackAlreadyOnServer"] = signature in signatures or (
+                not duration_ms and title_artist in title_artist_signatures
+            )
+    except Exception as exc:
+        print(f"[discover] Jellyfin track match failed: {type(exc).__name__}: {exc}")
+        for track in tracks:
+            track["trackAlreadyOnServer"] = False
+    return tracks
+
+
+def _itunes_album_for_song_title(query: str) -> dict | None:
+    """Find the top exact iTunes song match and return its parent album card."""
+    query = (query or "").strip()
+    if not query:
+        return None
+    try:
+        response = _itunes_session_safe().get(
+            "https://itunes.apple.com/search",
+            params={"term": query, "media": "music", "entity": "song", "limit": 25},
+            timeout=8,
+        )
+        response.raise_for_status()
+        matches = response.json().get("results") or []
+        exact = next((item for item in matches
+                      if norm(item.get("trackName", "")) == norm(query)
+                      and item.get("collectionId") and item.get("collectionName")), None)
+        if not exact:
+            return None
+        collection_id = exact["collectionId"]
+        title = exact.get("collectionName") or ""
+        artist = exact.get("artistName") or ""
+        artwork = exact.get("artworkUrl100") or ""
+        artwork = re.sub(r"\d{2,4}x\d{2,4}bb", "600x600bb", artwork)
+        return {
+            "id": int(collection_id),
+            "title": title,
+            "artist": artist,
+            "artwork": artwork,
+            "track_count": exact.get("trackCount") or 0,
+            "release_date": (exact.get("releaseDate") or "")[:10],
+            "genre": exact.get("primaryGenreName") or "",
+            "source": "itunes",
+            "source_id": str(collection_id),
+            "source_url": f"https://music.apple.com/us/album/{_providers.slugify(title)}/{collection_id}",
+            "matched_song": exact.get("trackName") or query,
+        }
+    except Exception as exc:
+        print(f"[automator] iTunes song-to-album lookup failed: {type(exc).__name__}: {exc}")
+        return None
 
 
 # ---------------------------------------------------------------- iTunes search
@@ -503,33 +650,34 @@ def itunes_album_tracks(collection_id,
 
     # Cache key: prefer numeric iTunes id; otherwise hash by name.
     cache_key: int | None = itunes_cid
+    track_providers = _resolve_tracklist_providers()
     if cache_key is not None:
-        cached = _album_tracks_cached_get(cache_key)
+        cached = _album_tracks_cached_get(cache_key, track_providers)
         if cached:
             return _with_workflow_track_ids(cached, collection_id)
     if title_hint and artist_hint:
-        cached = _album_tracks_cached_get_name(title_hint, artist_hint)
+        cached = _album_tracks_cached_get_name(title_hint, artist_hint, track_providers)
         if cached:
             return _with_workflow_track_ids(cached, collection_id)
 
-    agg = aggregate_album_tracks(
+    agg = _aggregate_album_tracks_by_priority(
         collection_id=str(itunes_cid) if itunes_cid is not None else None,
         title=title_hint,
         artist=artist_hint,
         timeout_per_provider=8.0,
-        providers=_resolve_discover_providers(),
+        providers=track_providers,
     )
 
     # If the aggregator didn't return ok but we have title/artist
     # hints, try once more with a name-only aggregator call. Useful when
     # iTunes is rate-limiting and we don't have the collectionId.
     if not agg.get("ok") and title_hint and artist_hint:
-        agg = aggregate_album_tracks(
+        agg = _aggregate_album_tracks_by_priority(
             collection_id=None,
             title=title_hint,
             artist=artist_hint,
             timeout_per_provider=8.0,
-            providers=_resolve_discover_providers(),
+            providers=track_providers,
         )
 
     if not agg.get("ok"):
@@ -547,10 +695,30 @@ def itunes_album_tracks(collection_id,
     }
     payload = _with_workflow_track_ids(payload, collection_id)
     if cache_key is not None:
-        _album_tracks_cached_put(cache_key, payload)
+        _album_tracks_cached_put(cache_key, payload, track_providers)
     if title_hint and artist_hint:
-        _album_tracks_cached_put_name(title_hint, artist_hint, payload)
+        _album_tracks_cached_put_name(title_hint, artist_hint, payload, track_providers)
     return payload
+
+
+def _aggregate_album_tracks_by_priority(*, providers: list[str], **kwargs) -> dict:
+    """Try tracklist providers in order and return the first usable result.
+
+    Tracklists are alternatives, not independent songs to concatenate. Using
+    one complete provider result prevents slight timing/artist differences
+    across catalogs from surfacing as duplicate tracks.
+    """
+    failures = []
+    for provider_name in providers:
+        result = aggregate_album_tracks(providers=[provider_name], **kwargs)
+        if result.get("ok") and result.get("tracks"):
+            return result
+        failures.append({"provider": provider_name,
+                         "error": result.get("error") or "no tracks returned"})
+    return {"ok": False,
+            "error": "No selected provider returned an album tracklist.",
+            "details": failures,
+            "album": {}, "tracks": [], "providers": {}, "source": ""}
 
 
 def _with_workflow_track_ids(payload: dict, collection_id) -> dict:
@@ -608,7 +776,33 @@ def itunes_song_album(track_id: int = 0, *, title: str = "",
                 "album": {}, "tracks": []}
 
     if title and artist:
-        # Song search -> pick first hit's album id -> album lookup
+        # The chart page gives us only a title and artist. Resolve that exact
+        # track through Apple's Search API first so the parent album ID comes
+        # from song metadata instead of treating the song title as an album.
+        try:
+            response = _itunes_session_safe().get(
+                "https://itunes.apple.com/search",
+                params={"term": f"{title} {artist}", "media": "music",
+                        "entity": "song", "limit": 25},
+                timeout=8,
+            )
+            response.raise_for_status()
+            results = response.json().get("results") or []
+            wanted_title, wanted_artist = norm(title), norm(artist)
+            exact = next((item for item in results
+                          if norm(item.get("trackName", "")) == wanted_title
+                          and norm(item.get("artistName", "")) == wanted_artist
+                          and item.get("collectionId")), None)
+            if exact:
+                return itunes_album_tracks(
+                    exact["collectionId"],
+                    title_hint=exact.get("collectionName") or "",
+                    artist_hint=exact.get("artistName") or artist,
+                )
+        except Exception:
+            pass  # Preserve the multi-provider fallback below.
+
+        # Fall back to provider song search when iTunes has no exact match.
         s = aggregate_song_search(f"{title} {artist}", limit=5)
         songs = (s.get("songs") or [])
         if not songs:
@@ -616,13 +810,17 @@ def itunes_song_album(track_id: int = 0, *, title: str = "",
                     "error": "no song found",
                     "album": {}, "tracks": []}
         first = songs[0]
+        source_track_id = str(first.get("source_id") or "")
+        if first.get("source") == "itunes" and source_track_id.isdigit():
+            return itunes_song_album(int(source_track_id), title=title, artist=artist)
         # We need an album id; song search may not include one. Use the
         # album lookup directly with title+artist.
-        agg = aggregate_album_tracks(
+        agg = _aggregate_album_tracks_by_priority(
             collection_id=None,
             title=first.get("title", ""),
             artist=first.get("artist", ""),
             timeout_per_provider=8.0,
+            providers=_resolve_tracklist_providers(),
         )
         if agg.get("ok"):
             return {"ok": True,
@@ -763,9 +961,13 @@ def _save_album_tracks_cache() -> None:
         pass
 
 
-def _album_tracks_cached_get(cid: int) -> dict | None:
+def _tracklist_cache_key(provider_names: list[str]) -> str:
+    return "tracklist-v2::" + ",".join(provider_names)
+
+
+def _album_tracks_cached_get(cid: int, provider_names: list[str]) -> dict | None:
     """Return a fresh-enough cached payload, or None if stale/missing."""
-    key = str(int(cid))
+    key = f"{_tracklist_cache_key(provider_names)}::{int(cid)}"
     with _album_tracks_lock:
         entry = _album_tracks_cache.get(key)
     if not entry:
@@ -779,26 +981,27 @@ def _album_tracks_cached_get(cid: int) -> dict | None:
     return entry.get("data")
 
 
-def _album_tracks_cached_put(cid: int, data: dict) -> None:
+def _album_tracks_cached_put(cid: int, data: dict, provider_names: list[str]) -> None:
     """Persist a successful lookup result."""
     if not data or not data.get("ok"):
         return
     with _album_tracks_lock:
-        _album_tracks_cache[str(int(cid))] = {
+        key = f"{_tracklist_cache_key(provider_names)}::{int(cid)}"
+        _album_tracks_cache[key] = {
             "at": datetime.now().isoformat(), "data": data}
     _save_album_tracks_cache()
 
 
-def _name_cache_key(title: str, artist: str) -> str:
+def _name_cache_key(title: str, artist: str, provider_names: list[str]) -> str:
     """Stable cache key for a (title, artist) pair — uses providers.norm()
     so 'Don't Panic' from MusicBrainz and 'Don't Panic' from AudioDB
     collide on the same key.
     """
-    return f"name::{norm(title)}::{norm(artist)}"
+    return f"{_tracklist_cache_key(provider_names)}::name::{norm(title)}::{norm(artist)}"
 
 
-def _album_tracks_cached_get_name(title: str, artist: str) -> dict | None:
-    key = _name_cache_key(title, artist)
+def _album_tracks_cached_get_name(title: str, artist: str, provider_names: list[str]) -> dict | None:
+    key = _name_cache_key(title, artist, provider_names)
     with _album_tracks_lock:
         entry = _album_tracks_cache.get(key)
     if not entry:
@@ -812,12 +1015,13 @@ def _album_tracks_cached_get_name(title: str, artist: str) -> dict | None:
     return entry.get("data")
 
 
-def _album_tracks_cached_put_name(title: str, artist: str, data: dict) -> None:
+def _album_tracks_cached_put_name(title: str, artist: str, data: dict,
+                                  provider_names: list[str]) -> None:
     if not data or not data.get("ok"):
         return
     if not (title and artist):
         return
-    key = _name_cache_key(title, artist)
+    key = _name_cache_key(title, artist, provider_names)
     with _album_tracks_lock:
         _album_tracks_cache[key] = {"at": datetime.now().isoformat(), "data": data}
     _save_album_tracks_cache()
@@ -1347,10 +1551,23 @@ def _download_single_album_video(job_id: str, title_album: str, artist_album: st
 
 @app.get("/")
 def index_root(request: Request):
-    """Legacy `/` route — redirect to `/gallery` for backward compat with
-    bookmarks to the old Songs home page."""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/gallery", status_code=301)
+    """Send signed-in users to their library; middleware handles first run."""
+    return RedirectResponse(url="/gallery", status_code=303)
+
+
+@app.get("/welcome")
+def welcome_page(request: Request, next: str = Query("/gallery")):
+    user = jellyfin_auth.get_session(request.cookies.get(jellyfin_auth.SESSION_COOKIE))
+    if user:
+        return RedirectResponse("/gallery", status_code=303)
+    profile = automator.load_profile()
+    if profile.setup_complete:
+        return RedirectResponse("/login", status_code=303)
+    parsed_next = urlsplit(next)
+    safe_next = (next if next.startswith("/") and not next.startswith("//")
+                 and "\\" not in next and not parsed_next.scheme and not parsed_next.netloc
+                 else "/gallery")
+    return templates.TemplateResponse(request, "welcome.html", {"next_path": safe_next})
 
 
 @app.get("/login")
@@ -1397,10 +1614,13 @@ async def api_auth_login(request: Request):
         jellyfin_auth.record_failed_login(client_key)
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=401)
 
-    try:
-        jellyfin_auth.save_server_url(server_url)
-    except OSError:
-        return JSONResponse({"ok": False, "error": "Could not save the Jellyfin server address to app data."}, status_code=500)
+    if profile.jellyfin_url != server_url or not profile.setup_complete:
+        profile.jellyfin_url = server_url
+        profile.setup_complete = True
+        try:
+            automator.save_profile(profile)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Could not save the Jellyfin address in the Automator profile database: {exc}"}, status_code=500)
     jellyfin_auth.clear_failed_logins(client_key)
     session_id = jellyfin_auth.create_session(user)
     response = JSONResponse({"ok": True, "username": user["username"]})
@@ -1447,16 +1667,20 @@ def index_repair(request: Request):
 def api_trending(refresh: int = Query(0, ge=0, le=1)):
     try:
         data = get_trending(force=bool(refresh))
+        data["songs"] = _annotate_tracks_on_server(data.get("songs") or [])
         return {"ok": True, **data}
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 @app.get("/api/albums")
-def api_albums(refresh: int = Query(0, ge=0, le=1)):
+def api_albums(refresh: int = Query(0, ge=0, le=1), genre: str = Query("all")):
     try:
-        data = get_albums(force=bool(refresh))
+        data = get_albums(force=bool(refresh), genre=genre)
+        data["albums"] = _annotate_albums_on_server(data.get("albums") or [])
         return {"ok": True, **data}
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -1490,7 +1714,12 @@ def api_thumbnail(q: str = Query("", description="Song title + artist")):
 def api_search(q: str = Query("", description="Search query"),
                kind: str = Query("all", description="song|album|all"),
                limit: int = Query(25, ge=1, le=50)):
-    return itunes_search(q, kind=kind, limit=limit)
+    data = itunes_search(q, kind=kind, limit=limit)
+    if kind in {"album", "all"}:
+        data["albums"] = _annotate_albums_on_server(data.get("albums") or [])
+    if kind in {"song", "all"}:
+        data["songs"] = _annotate_tracks_on_server(data.get("songs") or [])
+    return data
 
 
 @app.get("/api/album/{collection_id}/tracks")
@@ -1504,7 +1733,14 @@ def api_album_tracks(collection_id: str,
 def api_song_album(track_id: int,
                    title: str = Query("", description="Optional title hint (helps when track_id is unknown to providers other than iTunes)"),
                    artist: str = Query("", description="Optional artist hint")):
-    return itunes_song_album(track_id, title=title, artist=artist)
+    result = itunes_song_album(track_id, title=title, artist=artist)
+    if result.get("ok"):
+        album = result.get("album") or {}
+        album["tracks"] = result.get("tracks") or []
+        _annotate_albums_on_server([album])
+        result["album"] = album
+        result["tracks"] = album["tracks"]
+    return result
 
 
 @app.get("/api/song/search")
@@ -1515,8 +1751,10 @@ def api_song_search(q: str = Query(..., min_length=1),
     Each result carries `album_id` (provider-native) so the UI can drive
     the existing "Add to cart" flow via /api/automator/album/{id}/tracks.
     """
-    return aggregate_song_search(q, limit=limit,
-                                  providers=_resolve_discover_providers())
+    result = aggregate_song_search(q, limit=limit,
+                                   providers=_resolve_discover_providers())
+    result["songs"] = _annotate_tracks_on_server(result.get("songs") or [])
+    return result
 
 
 @app.get("/api/cookies")
@@ -1748,19 +1986,20 @@ async def api_repair_rename_apply(request: Request):
 
 @app.get("/api/settings/discover")
 def api_settings_discover_get():
-    """Return the user's discover-search provider selection plus the
-    canonical list of currently enabled providers so the UI can render
-    checkboxes.
-    """
+    """Return provider choices for discovery and ordered album track lookup."""
     available = [p.name for p in enabled_providers()]
     with _discover_lock:
         requested = list(_discover_settings.get("providers") or [])
+        track_requested = list(_discover_settings.get("track_providers") or [])
     is_all = (not requested) or ("all" in requested)
+    is_all_tracks = (not track_requested) or ("all" in track_requested)
     return {
         "ok": True,
         "providers": ["all"] if is_all else requested,
         "available": available,
         "active": _resolve_discover_providers(),
+        "track_providers": ["all"] if is_all_tracks else track_requested,
+        "active_track_providers": _resolve_tracklist_providers(),
     }
 
 
@@ -1771,6 +2010,9 @@ async def api_settings_discover_save(request: Request):
     raw = body.get("providers") if isinstance(body, dict) else None
     if not isinstance(raw, list):
         return {"ok": False, "error": "providers must be a list"}
+    track_raw = body.get("track_providers") if isinstance(body, dict) else None
+    if track_raw is not None and not isinstance(track_raw, list):
+        return {"ok": False, "error": "track_providers must be a list"}
     available = {p.name for p in enabled_providers()}
     cleaned: list[str] = []
     seen = set()
@@ -1785,13 +2027,33 @@ async def api_settings_discover_save(request: Request):
             cleaned.append(e)
     if "all" in cleaned or not cleaned:
         cleaned = ["all"]
+    if track_raw is None:
+        with _discover_lock:
+            cleaned_track = list(_discover_settings.get("track_providers") or ["all"])
+    else:
+        cleaned_track = []
+        seen_track = set()
+        for entry in track_raw:
+            if not isinstance(entry, str):
+                continue
+            name = entry.strip().lower()
+            if not name or name in seen_track:
+                continue
+            seen_track.add(name)
+            if name == "all" or name in available:
+                cleaned_track.append(name)
+        if "all" in cleaned_track or not cleaned_track:
+            cleaned_track = ["all"]
     with _discover_lock:
         _discover_settings["providers"] = cleaned
+        _discover_settings["track_providers"] = cleaned_track
         _save_discover_settings()
     return {
         "ok": True,
         "providers": cleaned,
         "active": _resolve_discover_providers(),
+        "track_providers": cleaned_track,
+        "active_track_providers": _resolve_tracklist_providers(),
     }
 
 
@@ -2017,9 +2279,17 @@ def api_automator_library_album_tracks(album_id: str):
 def api_automator_search_albums(q: str = Query("", description="Search query"),
                                  limit: int = Query(25, ge=1, le=50)):
     res = itunes_search(q, kind="album", limit=limit)
-    if not res.get("ok"):
-        return res
     albums = res.get("albums") or []
+    song_album = _itunes_album_for_song_title(q)
+    if song_album:
+        duplicate = next((album for album in albums
+                          if (str(album.get("id")) == str(song_album["id"]))
+                          or (norm(album.get("title", "")) == norm(song_album["title"])
+                              and norm(album.get("artist", "")) == norm(song_album["artist"]))), None)
+        if duplicate:
+            duplicate["matched_song"] = song_album["matched_song"]
+        else:
+            albums.insert(0, song_album)
     p = automator.load_profile()
     if p.is_configured():
         client = automator.JellyfinClient(p.jellyfin_url, p.jellyfin_api_key)
@@ -2032,6 +2302,7 @@ def api_automator_search_albums(q: str = Query("", description="Search query"),
         for a in albums:
             a["alreadyOnServer"] = False
     res["albums"] = albums
+    res["ok"] = bool(res.get("ok") or albums)
     return res
 
 
@@ -2042,17 +2313,11 @@ def api_automator_album_tracks(collection_id: str,
     res = itunes_album_tracks(collection_id, title_hint=title, artist_hint=artist)
     if not res.get("ok"):
         return res
-    p = automator.load_profile()
-    if p.is_configured():
-        client = automator.JellyfinClient(p.jellyfin_url, p.jellyfin_api_key)
-        try:
-            albums = automator.mark_already_on_server([res.get("album") or {}], client)
-            if albums:
-                res["album"]["alreadyOnServer"] = albums[0].get("alreadyOnServer", False)
-        except Exception:
-            res["album"]["alreadyOnServer"] = False
-    else:
-        res["album"]["alreadyOnServer"] = False
+    album = res.get("album") or {}
+    album["tracks"] = res.get("tracks") or []
+    _annotate_albums_on_server([album])
+    res["album"] = album
+    res["tracks"] = album["tracks"]
     return res
 
 
@@ -2336,4 +2601,4 @@ if __name__ == "__main__":
     import uvicorn
     print(f"Cookie file: {COOKIE_FILE} exists={COOKIE_FILE.exists()}")
     print(f"Downloads : {DOWNLOAD_DIR}")
-    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=False, log_level="info")
+    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=False, log_level="info")

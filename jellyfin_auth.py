@@ -1,7 +1,6 @@
 """Jellyfin-backed sign-in and short-lived, server-side web sessions."""
 from __future__ import annotations
 
-import json
 import os
 import threading
 import time
@@ -9,9 +8,6 @@ from urllib.parse import urlsplit
 
 import requests
 
-from app_paths import data_file
-
-AUTH_CONFIG_FILE = data_file("jellyfin_auth.json")
 SESSION_TTL_SECONDS = 12 * 60 * 60
 SESSION_COOKIE = "sleeve_session"
 
@@ -49,32 +45,13 @@ def validate_server_url(value: str) -> str:
 
 
 def configured_server_url(profile_url: str = "") -> str:
-    """Resolve the server from environment, Automator settings, then saved setup."""
-    env_url = os.environ.get("SLEEVE_JELLYFIN_URL") or os.environ.get("JELLYFIN_URL")
-    if env_url:
-        try:
-            return validate_server_url(env_url)
-        except JellyfinLoginError:
-            return ""
+    """Return the validated Jellyfin URL stored in the Automator profile."""
     if profile_url:
         try:
             return validate_server_url(profile_url)
         except JellyfinLoginError:
-            pass
-    try:
-        saved = json.loads(AUTH_CONFIG_FILE.read_text(encoding="utf-8"))
-        if saved.get("server_url"):
-            return validate_server_url(saved["server_url"])
-    except (OSError, ValueError, AttributeError, JellyfinLoginError):
-        pass
+            return ""
     return ""
-
-
-def save_server_url(url: str) -> None:
-    if os.environ.get("SLEEVE_JELLYFIN_URL") or os.environ.get("JELLYFIN_URL"):
-        return
-    AUTH_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    AUTH_CONFIG_FILE.write_text(json.dumps({"server_url": url}, indent=2), encoding="utf-8")
 
 
 def authenticate_admin(server_url: str, username: str, password: str) -> dict:

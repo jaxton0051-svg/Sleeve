@@ -4,6 +4,10 @@
 
 A self-hosted music utility for browsing a Jellyfin music library, discovering albums and tracks, downloading audio, and maintaining lyric files and album folders.
 
+## Preview
+
+![Sleeve first-run welcome screen](images/welcome.png)
+
 ## What it does
 
 - **Library:** browse and filter albums from a configured Jellyfin server.
@@ -23,7 +27,7 @@ python -m pip install -r requirements.txt
 python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
 
-Visit <http://127.0.0.1:5000> and sign in with a Jellyfin administrator account. For remote access, place Sleeve behind HTTPS; see the [setup guide](docs/SETUP.md).
+Visit <http://127.0.0.1:5000> to see the welcome screen and connect Jellyfin with an administrator account. Sleeve remembers the server address in its local Automator profile, but never stores your Jellyfin password. For remote access, place Sleeve behind HTTPS; see the [setup guide](docs/SETUP.md).
 
 ## Project guide
 
@@ -35,4 +39,4 @@ The frontend uses plain JavaScript and CSS, with no package manager or build ste
 
 ## Local data and privacy
 
-The app writes browser cookies, Jellyfin settings/API keys, sign-in server address, caches, temporary audio, and downloads to the per-user data directory (see [Setup](docs/SETUP.md)). Login passwords and Jellyfin access tokens are not stored. Existing root-level settings are copied on first run and left untouched. `.gitignore` also excludes legacy local files. Review `git status` before sharing a checkout, and never publish `.env`, `automator_profile.json`, `cookie.txt`, or `cookies.txt`.
+The app writes browser cookies, the Automator profile (including its Jellyfin API key), caches, temporary audio, and downloads to the per-user data directory (see [Setup](docs/SETUP.md)). The profile is stored in `automator_profile.sqlite3`; obsolete JSON profiles are removed during the one-time first-run profile reset and are not imported. Login passwords and Jellyfin access tokens are not stored. Existing root-level settings are copied on first run and left untouched, except for the obsolete profile files. `.gitignore` also excludes local data files. Review `git status` before sharing a checkout, and never publish `.env`, `automator_profile.sqlite3`, `automator_profile.json`, `cookie.txt`, or `cookies.txt`.

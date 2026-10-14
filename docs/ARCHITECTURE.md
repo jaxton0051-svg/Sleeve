@@ -5,7 +5,7 @@
 - `app.py` serves the FastAPI application, Jinja pages, API endpoints, chart feeds, download jobs, and repair endpoints.
 - `templates/index.html` is the shared page shell. The `active_tab` value selects Library, Discover, Automator, or Repair content.
 - `static/app.js` owns shared cookie, download-queue, file-list, and Library behavior. `static/discover.js`, `static/automator.js`, and `static/repair.js` own their respective workflows.
-- `providers.py` adapts album and song search/tracklist providers to a common shape and deduplicates results.
+- `providers.py` adapts album and song search/tracklist providers to a common shape and deduplicates search results. Album tracklists use the ordered source fallback selected in Automator settings and keep one provider's list intact rather than merging parallel catalogs.
 - `automator.py` contains Jellyfin integration, download verification/tagging, lyric lookup/transcription, and library repair operations.
 - `cookie_cleaner.py` normalizes exported browser cookie files. `requirements.txt` lists the runtime Python dependencies.
 - `app_paths.py` selects the per-user data directory and migrates legacy local files by copying them once; the source checkout remains the code/config template location.
@@ -13,7 +13,7 @@
 
 The browser calls the existing JSON endpoints directly. Keep DOM IDs consumed by the page scripts and response shapes consumed by those scripts aligned when changing a workflow. Static assets are served with revalidation headers; update the asset version in the template when cache behavior changes.
 
-All application pages and APIs require an active Jellyfin administrator session. The login route and static files are public. Sessions expire after 12 hours or when the server restarts; the default deployment is one Uvicorn process. Jellyfin's administrator API key remains server-side in the Automator profile for library operations.
+On a fresh install, `/` opens the standalone welcome screen. It links to Jellyfin administrator sign-in; a successful sign-in marks setup complete and subsequent sign-outs return to the login screen. Before sign-in, the welcome and login routes, authentication API, and static assets are public; all other pages and APIs require an active Jellyfin administrator session. Sessions expire after 12 hours or when the server restarts; the default deployment is one Uvicorn process. Jellyfin's administrator API key remains server-side in the Automator profile for library operations. The setup completion flag and profile are stored in SQLite; passwords and Jellyfin access tokens are not stored.
 
 ## External services and attribution
 

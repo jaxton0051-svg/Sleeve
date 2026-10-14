@@ -101,7 +101,7 @@
 
     function addToCart(album, tracks) {
         // De-dupe by collectionId
-        if (cart.albums.some((a) => a.id === album.id)) return false;
+        if (cart.albums.some((a) => String(a.id) === String(album.id))) return false;
         cart.albums.push(withUniqueTrackIds({
             id: album.id,
             title: album.title || album.collectionName || "",
@@ -117,7 +117,7 @@
     }
 
     function removeFromCart(id) {
-        cart.albums = cart.albums.filter((a) => a.id !== id);
+        cart.albums = cart.albums.filter((a) => String(a.id) !== String(id));
         saveCart();
     }
 
@@ -220,6 +220,7 @@
         $("#ap-backup-mode").value = bk.mode || "skip";
         $("#ap-backup-path").value = bk.path || "";
         $("#automator-settings-feedback").textContent = "";
+        _trackProviderOrder = null;
         // Discover search providers are loaded async — fetch them now so
         // the modal renders populated checkboxes when it appears.
         loadDiscoverProviders().then(populateDiscoverProviderChoices);
@@ -238,7 +239,7 @@
                 return r;
             }
         } catch (e) { /* fall through */ }
-        _discoverState = { providers: ["all"], available: [], active: [] };
+        _discoverState = { providers: ["all"], track_providers: ["all"], available: [], active: [], active_track_providers: [] };
         return _discoverState;
     }
 
@@ -291,6 +292,132 @@
         }
 
         setupDiscoverProviderListeners(list);
+        populateTracklistProviderChoices(state);
+    }
+
+    let _trackProviderOrder = null;
+
+    function providerLabel(name) {
+        return ({
+            itunes: "iTunes",
+            musicbrainz: "MusicBrainz",
+            deezer: "Deezer",
+            audiodb: "TheAudioDB",
+            spotify: "Spotify",
+        })[name] || name;
+    }
+
+    function populateTracklistProviderChoices(state) {
+        const list = $("#ap-track-providers-list");
+        if (!list || !state) return;
+        const available = state.available || [];
+        const saved = state.track_providers || ["all"];
+        if (_trackProviderOrder === null) {
+            _trackProviderOrder = (!saved.length || saved.includes("all"))
+                ? available.slice()
+                : saved.filter((name) => available.includes(name));
+            if (!_trackProviderOrder.length) _trackProviderOrder = available.slice();
+        }
+
+        list.innerHTML = "";
+        const reset = document.createElement("button");
+        reset.type = "button";
+        reset.className = "btn btn-ghost btn-sm track-provider-reset";
+        reset.textContent = "Use all defaults";
+        reset.addEventListener("click", () => {
+            _trackProviderOrder = available.slice();
+            populateTracklistProviderChoices(state);
+        });
+        list.appendChild(reset);
+
+        const orderHeading = document.createElement("p");
+        orderHeading.className = "muted small track-provider-heading";
+        orderHeading.textContent = "Selected order (fallback priority)";
+        list.appendChild(orderHeading);
+
+        const names = [..._trackProviderOrder, ...available.filter((name) => !_trackProviderOrder.includes(name))];
+        names.forEach((name) => {
+            const selectedIndex = _trackProviderOrder.indexOf(name);
+            const row = document.createElement("div");
+            row.className = "track-provider-row" + (selectedIndex >= 0 ? " is-selected" : "");
+
+            const label = document.createElement("label");
+            label.className = "checkbox-row track-provider-choice";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = selectedIndex >= 0;
+            checkbox.dataset.trackProvider = name;
+            checkbox.setAttribute("aria-label", `Use ${providerLabel(name)} for album tracklists`);
+            const nameText = document.createElement("span");
+            nameText.textContent = providerLabel(name);
+            label.append(checkbox, nameText);
+            row.appendChild(label);
+
+            const priority = document.createElement("span");
+            priority.className = "track-provider-priority muted small";
+            priority.textContent = selectedIndex >= 0 ? `#${selectedIndex + 1}` : "Not used";
+            row.appendChild(priority);
+
+            if (selectedIndex >= 0) {
+                const actions = document.createElement("div");
+                actions.className = "track-provider-order-actions";
+                [["up", "Move up"], ["down", "Move down"]].forEach(([direction, labelText]) => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "btn btn-ghost btn-sm";
+                    button.dataset.moveTrackProvider = name;
+                    button.dataset.direction = direction;
+                    button.textContent = direction === "up" ? "↑" : "↓";
+                    button.setAttribute("aria-label", `${labelText} ${providerLabel(name)} in fallback order`);
+                    button.title = labelText;
+                    button.disabled = direction === "up" ? selectedIndex === 0 : selectedIndex === _trackProviderOrder.length - 1;
+                    actions.appendChild(button);
+                });
+                row.appendChild(actions);
+            }
+            list.appendChild(row);
+        });
+
+        if (list.dataset.wired === "1") return;
+        list.dataset.wired = "1";
+        list.addEventListener("change", (event) => {
+            const checkbox = event.target.closest("input[data-track-provider]");
+            if (!checkbox) return;
+            if (checkbox.checked) {
+                if (!_trackProviderOrder.includes(checkbox.dataset.trackProvider)) _trackProviderOrder.push(checkbox.dataset.trackProvider);
+            } else if (_trackProviderOrder.length > 1) {
+                _trackProviderOrder = _trackProviderOrder.filter((name) => name !== checkbox.dataset.trackProvider);
+            } else {
+                checkbox.checked = true;
+                return;
+            }
+            populateTracklistProviderChoices(_discoverState || state);
+            list.querySelector(`input[data-track-provider="${checkbox.dataset.trackProvider}"]`)?.focus();
+        });
+        list.addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-move-track-provider]");
+            if (!button) return;
+            const index = _trackProviderOrder.indexOf(button.dataset.moveTrackProvider);
+            const next = button.dataset.direction === "up" ? index - 1 : index + 1;
+            if (index < 0 || next < 0 || next >= _trackProviderOrder.length) return;
+            const provider = button.dataset.moveTrackProvider;
+            [_trackProviderOrder[index], _trackProviderOrder[next]] = [_trackProviderOrder[next], _trackProviderOrder[index]];
+            populateTracklistProviderChoices(_discoverState || state);
+            const nextFocus = list.querySelector(`button[data-move-track-provider="${provider}"][data-direction="${button.dataset.direction}"]`);
+            (nextFocus && !nextFocus.disabled ? nextFocus : list.querySelector(`input[data-track-provider="${provider}"]`))?.focus();
+        });
+    }
+
+    function collectTracklistProviders() {
+        const list = $("#ap-track-providers-list");
+        if (!list) return ["all"];
+        const selected = [...list.querySelectorAll("input[data-track-provider]:checked")]
+            .map((checkbox) => checkbox.dataset.trackProvider);
+        if (!selected.length) return ["all"];
+        const available = _discoverState?.available || [];
+        const defaultsMatch = selected.length === available.length
+            && selected.every((name, index) => name === available[index]);
+        return defaultsMatch ? ["all"] : selected;
     }
 
     function setupDiscoverProviderListeners(list) {
@@ -362,7 +489,10 @@
                 // Save discover providers independently — failure here is
                 // not fatal, just shown in the feedback line.
                 const disc = await api("/api/settings/discover", {
-                    method: "POST", body: { providers: collectDiscoverProviders() },
+                    method: "POST", body: {
+                        providers: collectDiscoverProviders(),
+                        track_providers: collectTracklistProviders(),
+                    },
                 });
                 if (!disc || !disc.ok) {
                     $("#automator-settings-feedback").textContent =
@@ -421,10 +551,11 @@
             const albums = r.albums || [];
             if (!albums.length) {
                 grid.innerHTML = "";
-                meta.textContent = `No album results for "${esc(q)}".`;
+                meta.textContent = `No album or song-title matches for "${esc(q)}".`;
                 return;
             }
-            meta.textContent = `${albums.length} album${albums.length === 1 ? "" : "s"}`;
+            const songMatches = albums.filter((album) => album.matched_song).length;
+            meta.textContent = `${albums.length} album${albums.length === 1 ? "" : "s"}${songMatches ? ` · ${songMatches} found from song search` : ""}`;
             renderAlbumGrid(grid, albums);
         } catch (e) {
             meta.textContent = "Error: " + e.message;
@@ -455,6 +586,9 @@
                 ? "This album is already in your Jellyfin library"
                 : "Add album to queue";
             const yearLine = year ? `<p class="album-meta-line muted small">${esc(year)}${genre ? " &middot; " + genre : ""}</p>` : "";
+            const songMatchLine = a.matched_song
+                ? `<p class="album-meta-line song-match-line">Song match · ${esc(a.matched_song)}</p>`
+                : "";
             return `
             <article class="album-card${onserver ? " is-onserver" : ""}" data-album-id="${id}"
                      data-title="${esc(a.title || '')}"
@@ -470,6 +604,7 @@
                     <h3 class="album-title">${title}</h3>
                     <p class="album-artist">${artist}</p>
                     ${yearLine}
+                    ${songMatchLine}
                 </div>
                 <div class="album-card-actions">
                     <button class="album-preview-btn" type="button"
@@ -802,7 +937,7 @@
         list.addEventListener("click", (e) => {
             const rem = e.target.closest("[data-remove-cart]");
             if (!rem) return;
-            const id = parseInt(rem.dataset.removeCart, 10);
+            const id = rem.dataset.removeCart;
             removeFromCart(id);
             renderCart();
         });
@@ -1489,7 +1624,7 @@
                 clearCart();
                 renderCart();
                 closeModal("#automator-subs-modal");
-                _subsReviewState = null;
+                _lyricsReviewState = null;
                 refreshAutomatorJobs();
             } else {
                 toast("Failed to start: " + (r && r.error || "unknown"), "err");

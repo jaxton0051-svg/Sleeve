@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import shutil
 import subprocess
 import threading
@@ -38,7 +39,10 @@ from cookie_cleaner import ensure_cookie_file_valid  # self-healing cookies
 from app_paths import DATA_DIR, data_file
 
 PROJECT_DIR = Path(__file__).parent.resolve()
-PROFILE_FILE = data_file("automator_profile.json")
+PROFILE_FILE = DATA_DIR / "automator_profile.json"
+PROFILE_DB_FILE = DATA_DIR / "automator_profile.sqlite3"
+_PROFILE_DB_LOCK = threading.RLock()
+_PROFILE_RESET_MARKER = "profile_reset_2026_10_welcome"
 TMP_ROOT = DATA_DIR / "automator_tmp"
 TMP_ROOT.mkdir(exist_ok=True)
 
@@ -65,6 +69,7 @@ class AutomatorProfile:
     whisper_model: str = "turbo"      # tiny.en|base.en|small.en|small|medium.en|large-v3|turbo
     whisper_device: str = "auto"      # auto|cpu|cuda
     backup: BackupConfig = field(default_factory=BackupConfig)
+    setup_complete: bool = False
     updated_at: str = ""
 
     def to_dict(self) -> dict:
@@ -98,34 +103,119 @@ class AutomatorProfile:
         return bool(self.jellyfin_url and self.jellyfin_api_key and self.music_folder)
 
 
-def load_profile() -> AutomatorProfile:
-    if not PROFILE_FILE.exists():
-        return AutomatorProfile()
-    try:
-        data = json.loads(PROFILE_FILE.read_text(encoding="utf-8"))
-        bk = data.get("backup") or {}
-        return AutomatorProfile(
-            server_name=data.get("server_name", "") or "",
-            jellyfin_url=data.get("jellyfin_url", "") or "",
-            jellyfin_api_key=data.get("jellyfin_api_key", "") or "",
-            music_folder=data.get("music_folder", "") or "",
-            whisper_model=data.get("whisper_model", "small.en") or "small.en",
-            whisper_device=data.get("whisper_device", "auto") or "auto",
-            backup=BackupConfig(
-                enabled=bool(bk.get("enabled", False)),
-                mode=bk.get("mode", "skip") or "skip",
-                path=bk.get("path", "") or "",
-            ),
-            updated_at=data.get("updated_at", "") or "",
+def _connect_profile_db() -> sqlite3.Connection:
+    PROFILE_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(str(PROFILE_DB_FILE), timeout=10)
+    connection.execute("PRAGMA busy_timeout = 10000")
+    return connection
+
+
+def _ensure_profile_schema(connection: sqlite3.Connection) -> None:
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS automator_profile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            server_name TEXT NOT NULL DEFAULT '',
+            jellyfin_url TEXT NOT NULL DEFAULT '',
+            jellyfin_api_key TEXT NOT NULL DEFAULT '',
+            music_folder TEXT NOT NULL DEFAULT '',
+            whisper_model TEXT NOT NULL DEFAULT 'turbo',
+            whisper_device TEXT NOT NULL DEFAULT 'auto',
+            backup_enabled INTEGER NOT NULL DEFAULT 0,
+            backup_mode TEXT NOT NULL DEFAULT 'skip',
+            backup_path TEXT NOT NULL DEFAULT '',
+            setup_complete INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
         )
-    except Exception as e:
-        print(f"[automator] profile load failed: {e}")
+    """)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(automator_profile)")}
+    if "setup_complete" not in columns:
+        connection.execute("ALTER TABLE automator_profile ADD COLUMN setup_complete INTEGER NOT NULL DEFAULT 0")
+    connection.execute("CREATE TABLE IF NOT EXISTS sleeve_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    reset_done = connection.execute(
+        "SELECT 1 FROM sleeve_state WHERE key = ?", (_PROFILE_RESET_MARKER,)
+    ).fetchone()
+    if not reset_done:
+        # A one-time profile reset requested for the fresh-start test. Other
+        # app data lives separately and is intentionally left untouched.
+        connection.execute("DELETE FROM automator_profile")
+        connection.execute("INSERT INTO sleeve_state (key, value) VALUES (?, 'done')", (_PROFILE_RESET_MARKER,))
+        for legacy_file in (
+            PROFILE_FILE,
+            PROJECT_DIR / "automator_profile.json",
+            DATA_DIR / "jellyfin_auth.json",
+            PROJECT_DIR / "jellyfin_auth.json",
+        ):
+            try:
+                legacy_file.unlink(missing_ok=True)
+            except OSError as exc:
+                print(f"[automator] could not remove obsolete {legacy_file.name}: {exc}")
+
+
+def _write_profile(connection: sqlite3.Connection, profile: AutomatorProfile) -> None:
+    backup = profile.backup
+    connection.execute("""
+        INSERT INTO automator_profile (
+            id, server_name, jellyfin_url, jellyfin_api_key, music_folder,
+            whisper_model, whisper_device, backup_enabled, backup_mode,
+            backup_path, setup_complete, updated_at
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            server_name=excluded.server_name,
+            jellyfin_url=excluded.jellyfin_url,
+            jellyfin_api_key=excluded.jellyfin_api_key,
+            music_folder=excluded.music_folder,
+            whisper_model=excluded.whisper_model,
+            whisper_device=excluded.whisper_device,
+            backup_enabled=excluded.backup_enabled,
+            backup_mode=excluded.backup_mode,
+            backup_path=excluded.backup_path,
+            setup_complete=excluded.setup_complete,
+            updated_at=excluded.updated_at
+    """, (
+        profile.server_name, profile.jellyfin_url, profile.jellyfin_api_key,
+        profile.music_folder, profile.whisper_model, profile.whisper_device,
+        int(backup.enabled), backup.mode, backup.path, int(profile.setup_complete), profile.updated_at,
+    ))
+
+
+def load_profile() -> AutomatorProfile:
+    try:
+        with _PROFILE_DB_LOCK:
+            connection = _connect_profile_db()
+            try:
+                with connection:
+                    _ensure_profile_schema(connection)
+                    row = connection.execute("""
+                        SELECT server_name, jellyfin_url, jellyfin_api_key, music_folder,
+                               whisper_model, whisper_device, backup_enabled,
+                               backup_mode, backup_path, setup_complete, updated_at
+                        FROM automator_profile WHERE id = 1
+                    """).fetchone()
+            finally:
+                connection.close()
+        if not row:
+            return AutomatorProfile()
+        return AutomatorProfile(
+            server_name=row[0], jellyfin_url=row[1], jellyfin_api_key=row[2],
+            music_folder=row[3], whisper_model=row[4], whisper_device=row[5],
+            backup=BackupConfig(enabled=bool(row[6]), mode=row[7], path=row[8]),
+            setup_complete=bool(row[9]), updated_at=row[10],
+        )
+    except Exception as exc:
+        print(f"[automator] profile load failed: {type(exc).__name__}: {exc}")
         return AutomatorProfile()
 
 
 def save_profile(profile: AutomatorProfile) -> None:
     profile.updated_at = datetime.now().isoformat(timespec="seconds")
-    PROFILE_FILE.write_text(json.dumps(profile.to_dict(), indent=2), encoding="utf-8")
+    with _PROFILE_DB_LOCK:
+        connection = _connect_profile_db()
+        try:
+            with connection:
+                _ensure_profile_schema(connection)
+                _write_profile(connection, profile)
+        finally:
+            connection.close()
 
 
 # ---------------------------------------------------------------- Jellyfin
@@ -379,11 +469,12 @@ class JellyfinClient:
         def _norm_tracks(items: list) -> list[dict]:
             out = []
             for item in items or []:
-                artist = item.get("AlbumArtist") or item.get("Artist") or ""
+                artist = item.get("Artist") or ""
                 if not artist:
                     artists = item.get("Artists")
                     if isinstance(artists, list) and artists:
                         artist = artists[0]
+                artist = artist or item.get("AlbumArtist") or ""
                 # duration comes from Jellyfin in ticks (1 tick = 100 ns)
                 ticks = int(item.get("RunTimeTicks") or 0)
                 duration_ms = ticks // 10000 if ticks > 0 else 0
@@ -3166,13 +3257,15 @@ def mark_already_on_server(albums: list[dict], client: JellyfinClient) -> list[d
 
     # R2: track-level match against Jellyfin's audio library.
     recent_track_sigs = set()
+    recent_title_artist_sigs = set()
     if hasattr(client, "get_recent_tracks"):
         try:
-            for t in client.get_recent_tracks(limit=500) or []:
+            for t in client.get_recent_tracks(limit=5000) or []:
+                artist = t.get("artist", "")
+                title = t.get("title", "")
                 recent_track_sigs.add(
-                    _track_signature(t.get("artist", ""),
-                                     t.get("title", ""),
-                                     int((t.get("duration_ms") or 0))))
+                    _track_signature(artist, title, int((t.get("duration_ms") or 0))))
+                recent_title_artist_sigs.add((canonical(artist), canonical(title)))
         except Exception:
             pass
 
@@ -3180,11 +3273,13 @@ def mark_already_on_server(albums: list[dict], client: JellyfinClient) -> list[d
         a["alreadyOnServer"] = _album_signature(a.get("artist", ""), a.get("title", "")) in album_sigs
         # Per-track annotation
         for t in (a.get("tracks") or []):
-            t["trackAlreadyOnServer"] = _track_signature(
-                t.get("artist", "") or a.get("artist", ""),
-                t.get("title", ""),
-                int(t.get("duration_ms") or 0),
-            ) in recent_track_sigs
+            track_artist = t.get("artist", "") or a.get("artist", "")
+            duration_ms = int(t.get("duration_ms") or 0)
+            signature = _track_signature(track_artist, t.get("title", ""), duration_ms)
+            title_artist = (canonical(track_artist), canonical(t.get("title", "")))
+            t["trackAlreadyOnServer"] = signature in recent_track_sigs or (
+                not duration_ms and title_artist in recent_title_artist_sigs
+            )
     return albums
 
 

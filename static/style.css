@@ -1589,6 +1589,16 @@ img { max-width: 100%; display: block; }
     margin-left: .25rem;
 }
 .album-card .album-meta-line { margin: .25rem 0 0; }
+.album-card .song-match-line { color: var(--accent); font-size: .76rem; line-height: 1.35; overflow-wrap: anywhere; }
+.track-provider-list { display: grid; gap: .4rem; }
+.track-provider-reset { justify-self: start; }
+.track-provider-heading { margin: .25rem 0 0; }
+.track-provider-row { display: flex; align-items: center; gap: .65rem; min-height: 42px; padding: .4rem .55rem; border: 1px solid var(--border); border-radius: 8px; }
+.track-provider-row.is-selected { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.track-provider-choice { flex: 1; min-width: 0; cursor: pointer; }
+.track-provider-priority { min-width: 4.5rem; text-align: right; }
+.track-provider-order-actions { display: flex; gap: .25rem; }
+.track-provider-order-actions .btn { min-width: 36px; min-height: 36px; padding: .25rem; }
 
 /* Modal --------------------------------------------------------------- */
 
@@ -2738,3 +2748,21 @@ body[data-active-tab="repair"] .source-line { display: none; }
     .repair-tool-actions .btn { flex: 1 1 auto; }
     .repair-row { padding: 12px 10px; }
 }
+
+.genre-switcher {
+    display: flex; gap: 7px; margin: 16px 0 20px; padding: 3px 1px 9px;
+    overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity;
+    scrollbar-width: thin; scrollbar-color: #46483b transparent;
+}
+.genre-chip {
+    flex: 0 0 auto; min-height: 38px; padding: 0 15px; border: 1px solid #393b32;
+    border-radius: 999px; background: #191a16; color: var(--fg-muted); font: inherit;
+    font-size: 12px; font-weight: 650; cursor: pointer; scroll-snap-align: start;
+    transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+.genre-chip:hover { border-color: #666a53; color: var(--fg); }
+.genre-chip.is-active, .genre-chip[aria-pressed="true"] {
+    border-color: var(--accent); background: var(--accent); color: #1a1b14;
+}
+.genre-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#automator-queue-panel { scroll-margin-top: 90px; }

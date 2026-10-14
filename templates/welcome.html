@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#11120f">
+    <title>Welcome to Sleeve</title>
+    <link rel="icon" type="image/png" href="/static/sleeve-mark.png">
+    <link rel="stylesheet" href="/static/welcome.css">
+</head>
+<body class="welcome-page">
+    <a class="skip-link" href="#welcome-main">Skip to welcome content</a>
+    <div class="welcome-grain" aria-hidden="true"></div>
+    <header class="welcome-header">
+        <a class="welcome-brand" href="/welcome" aria-label="Sleeve welcome">
+            <img src="/static/sleeve-mark.png" width="38" height="38" alt="">
+            <span>sleeve<span class="brand-period">.</span></span>
+        </a>
+        <a class="github-link" href="https://github.com/Jaxton/AAA-Best-Music-App" target="_blank" rel="noopener noreferrer">
+            <span class="github-icon" aria-hidden="true">↗</span> Open source on GitHub
+        </a>
+    </header>
+
+    <main id="welcome-main" class="welcome-main">
+        <section class="welcome-hero" aria-labelledby="welcome-title">
+            <div class="hero-copy">
+                <p class="eyebrow"><span class="eyebrow-mark" aria-hidden="true"></span> YOUR MUSIC, IN GOOD HANDS</p>
+                <h1 id="welcome-title">Thanks for bringing<br><span>your music home.</span></h1>
+                <p class="hero-intro">Sleeve brings your Jellyfin music library, discovery, downloads, and cleanup tools together in one place. It runs on your machine and works with your server.</p>
+                <a class="welcome-cta" href="/login?next={{ next_path | urlencode }}">
+                    <span>Connect to Jellyfin</span><span class="cta-arrow" aria-hidden="true">↗</span>
+                </a>
+                <p class="privacy-note"><span aria-hidden="true">●</span> Your Jellyfin password is never saved by Sleeve.</p>
+            </div>
+
+            <div class="record-stage" aria-hidden="true">
+                <div class="orbit orbit-one"></div>
+                <div class="orbit orbit-two"></div>
+                <div class="cover cover-back cover-back-a"><span>SIDE<br>A</span></div>
+                <div class="cover cover-back cover-back-b"><span>VOL.<br>01</span></div>
+                <div class="record-shadow"></div>
+                <div class="record">
+                    <div class="record-grooves"></div>
+                    <div class="record-label"><span class="record-logo">s.</span><span class="record-caption">SLEEVE<br>ORIGINAL</span></div>
+                </div>
+                <div class="sound-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="floating-note note-one">♪</div><div class="floating-note note-two">♫</div>
+            </div>
+        </section>
+
+        <section class="welcome-details" aria-label="About Sleeve and setup">
+            <div class="feature-intro">
+                <p class="eyebrow">MADE FOR THE WHOLE COLLECTION</p>
+                <h2>One place for your<br>music rituals.</h2>
+                <p>Pick up where the listening starts, whether that's finding something new or getting a library back in tune.</p>
+            </div>
+            <div class="feature-list">
+                <article class="feature-row"><span class="feature-index">01</span><span class="feature-symbol" aria-hidden="true">▤</span><div><h3>Library &amp; Discover</h3><p>Browse your Jellyfin collection and explore albums, tracks, and music providers.</p></div></article>
+                <article class="feature-row"><span class="feature-index">02</span><span class="feature-symbol" aria-hidden="true">↓</span><div><h3>Automator</h3><p>Build album queues, review lyrics, and organize new music for your library.</p></div></article>
+                <article class="feature-row"><span class="feature-index">03</span><span class="feature-symbol" aria-hidden="true">⌁</span><div><h3>Repair</h3><p>Find lyric and file issues and take care of them with reviewable tools.</p></div></article>
+            </div>
+            <aside class="setup-note">
+                <span class="setup-step">FIRST LISTEN <span>01 / 02</span></span>
+                <div class="setup-line" aria-hidden="true"><span></span></div>
+                <h2>Connect your server.</h2>
+                <p>Use a Jellyfin administrator account to continue. Sleeve checks your sign-in with Jellyfin; your password is discarded afterward.</p>
+                <a href="/login?next={{ next_path | urlencode }}">Continue to sign in <span aria-hidden="true">→</span></a>
+            </aside>
+        </section>
+    </main>
+
+    <footer class="welcome-footer">
+        <span>THANK YOU FOR DOWNLOADING SLEEVE</span>
+        <span>SELF-HOSTED · OPEN SOURCE · MADE FOR MUSIC</span>
+        <a href="https://github.com/Jaxton/AAA-Best-Music-App" target="_blank" rel="noopener noreferrer">Explore the project <span aria-hidden="true">↗</span></a>
+    </footer>
+</body>
+</html>

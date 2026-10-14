@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#11120f">
     <title>Sleeve · {{ {'gallery': 'Library', 'discover': 'Discover', 'automator': 'Automator', 'repair': 'Repair'}.get(active_tab, 'Library') }}</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2026-10-13-discover-genres">
     <link rel="icon" type="image/png" href="/static/sleeve-mark.png">
 </head>
 <body data-active-tab="{{ active_tab }}">
@@ -135,6 +135,15 @@
             </section>
             <section class="card panel" aria-labelledby="discover-results-title">
                 <div class="panel-head"><div><p class="eyebrow">Music databases</p><h2 id="discover-results-title" class="panel-title">New &amp; recommended albums</h2></div></div>
+                <div class="genre-switcher" role="group" aria-label="Filter albums by genre">
+                    <button class="genre-chip" type="button" data-album-genre="all" aria-pressed="false">All</button>
+                    <button class="genre-chip is-active" type="button" data-album-genre="pop" aria-pressed="true">Pop</button>
+                    <button class="genre-chip" type="button" data-album-genre="country" aria-pressed="false">Country</button>
+                    <button class="genre-chip" type="button" data-album-genre="rock" aria-pressed="false">Rock</button>
+                    <button class="genre-chip" type="button" data-album-genre="hip-hop" aria-pressed="false">Hip-Hop</button>
+                    <button class="genre-chip" type="button" data-album-genre="k-pop" aria-pressed="false">K-pop</button>
+                    <button class="genre-chip" type="button" data-album-genre="alternative" aria-pressed="false">Alternative</button>
+                </div>
                 <div id="discover-grid" class="albums-grid" aria-live="polite" aria-busy="true"><p class="muted">Loading albums…</p></div>
             </section>
         </section>
@@ -163,10 +172,10 @@
             <div class="card panel">
                 <h2 class="panel-title"><span class="panel-emoji" aria-hidden="true">&#128269;</span> Discover</h2>
                 <form class="search-bar" id="automator-search-form" autocomplete="off" role="search">
-                    <label class="visually-hidden" for="automator-search-input">Search albums or artists</label>
+                    <label class="visually-hidden" for="automator-search-input">Search albums, artists, or songs</label>
                     <span class="search-icon" aria-hidden="true">&#128269;</span>
                     <input class="search-input" id="automator-search-input" type="search"
-                           placeholder="Search albums or artists"
+                           placeholder="Search albums, artists, or songs"
                            enterkeyhint="search" autocomplete="off">
                     <button class="btn btn-primary btn-sm search-btn" type="submit">Search</button>
                     <button class="btn btn-ghost btn-sm search-clear" type="button" id="automator-search-clear" hidden>Clear</button>
@@ -182,7 +191,7 @@
                 </div>
 
                 <div class="sub-panel is-active" id="automator-search">
-                    <p class="panel-desc" id="automator-search-meta">Search iTunes to find albums.</p>
+                    <p class="panel-desc" id="automator-search-meta">Search albums, artists, or song titles.</p>
                     <div id="automator-search-grid" class="albums-grid" aria-busy="false"></div>
                 </div>
 
@@ -193,7 +202,7 @@
             </div>
 
             <!-- Cart -->
-            <div class="card panel">
+            <div class="card panel" id="automator-queue-panel" tabindex="-1">
                 <h2 class="panel-title">
                     <span class="panel-emoji" aria-hidden="true">&#128722;</span>
                     Queue
@@ -302,6 +311,11 @@
                             <legend><strong>Discover search providers</strong></legend>
                             <p class="hint" style="margin-top:0;">Pick which music databases the discover search queries. Pick <strong>All</strong> to query every enabled provider. The aggregator dedupes results across the chosen providers.</p>
                             <div id="ap-discover-providers-list" class="row controls" style="flex-wrap:wrap; gap:.5rem;"></div>
+                        </fieldset>
+                        <fieldset class="form-row" style="border:1px solid var(--bg-placeholder); border-radius:8px; padding:.75rem;">
+                            <legend><strong>Album tracklist sources</strong></legend>
+                            <p class="hint" style="margin-top:0;">Sources are tried in order. The first one that returns tracks is used, so different catalogs do not add duplicate rows. Select sources and move them to set the fallback order.</p>
+                            <div id="ap-track-providers-list" class="track-provider-list" aria-live="polite"></div>
                         </fieldset>
                         <div id="automator-settings-feedback" class="status" role="status" aria-live="polite">&nbsp;</div>
                         <div class="row controls" style="margin-top:.5rem; justify-content:flex-end; gap:.5rem;">
@@ -562,8 +576,8 @@
     <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
     <script src="/static/a11y.js?v=2026-10-13-ui" defer></script>
     <script src="/static/app.js?v=2026-10-13-ui" defer></script>
-    <script src="/static/automator.js?v=2026-10-13-ui" defer></script>
+    <script src="/static/automator.js?v=2026-10-13-lyrics-review-reset" defer></script>
     <script src="/static/repair.js?v=2026-10-13-ui" defer></script>
-    {% if active_tab == 'discover' %}<script src="/static/discover.js?v=2026-10-13-ui" defer></script>{% endif %}
+    {% if active_tab == 'discover' %}<script src="/static/discover.js?v=2026-10-13-jellyfin-dedup" defer></script>{% endif %}
 </body>
 </html>
