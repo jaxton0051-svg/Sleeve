@@ -1,0 +1,25 @@
+services:
+  sleeve:
+    build: .
+    image: sleeve:local
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SLEEVE_PORT:-5000}:5000"
+    environment:
+      SLEEVE_DATA_DIR: /data
+      SLEEVE_COOKIE_SECURE: ${SLEEVE_COOKIE_SECURE:-0}
+      SEARXNG_URL: ${SEARXNG_URL:-}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+    volumes:
+      - sleeve-data:/data
+      - type: bind
+        source: ${SLEEVE_MUSIC_PATH:-./music}
+        target: /music
+        read_only: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  sleeve-data:

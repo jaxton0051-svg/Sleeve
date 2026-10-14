@@ -29,6 +29,16 @@ python -m uvicorn app:app --host 127.0.0.1 --port 5000
 
 Visit <http://127.0.0.1:5000> to see the welcome screen and connect Jellyfin with an administrator account. Sleeve remembers the server address in its local Automator profile, but never stores your Jellyfin password. For remote access, place Sleeve behind HTTPS; see the [setup guide](docs/SETUP.md).
 
+### Run with Docker
+
+Install Docker Desktop (Windows/macOS) or Docker Engine with the Compose plugin (Linux), copy `.env.example` to `.env`, and set `SLEEVE_MUSIC_PATH` to the host's music folder. Then run:
+
+```shell
+docker compose up --build -d
+```
+
+Open <http://127.0.0.1:5000>. Docker Compose keeps Sleeve's profile, cookies, caches, and downloads in a persistent named volume; the music folder is mounted read/write at `/music` for Automator and Repair. See [Docker setup](docs/SETUP.md#docker) for Jellyfin connectivity and volume details.
+
 ## Project guide
 
 - [Architecture and external services](docs/ARCHITECTURE.md)

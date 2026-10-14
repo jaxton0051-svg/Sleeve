@@ -22,9 +22,27 @@ python -m uvicorn app:app --host 127.0.0.1 --port 5000
 
 Open <http://127.0.0.1:5000> and sign in with a Jellyfin administrator account. Bind to `127.0.0.1` for a local-only instance. For remote access, put the app behind HTTPS and a trusted reverse proxy; set `SLEEVE_COOKIE_SECURE=1` so browsers only send the session cookie over HTTPS.
 
+## Docker
+
+Docker Compose runs Sleeve on `127.0.0.1:5000` by default. Install Docker Desktop on Windows/macOS or Docker Engine with the Compose plugin on Linux. From the project directory, copy `.env.example` to `.env` and edit `SLEEVE_MUSIC_PATH` to point to the host music directory:
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env, then:
+docker compose up --build -d
+```
+
+Open <http://127.0.0.1:5000>. Set `SLEEVE_PORT` in `.env` to change the host port. Use `docker compose logs -f sleeve` to view logs, `docker compose down` to stop Sleeve, and `docker compose up -d` to start it again. `docker compose down -v` also deletes the named `sleeve-data` volume, including the SQLite profile, API key, cookies, downloads, and caches; do not use `-v` unless you intend to erase that data.
+
+The named `sleeve-data` volume persists app data across container replacements. The host music directory is mounted read/write at `/music`; in **Automator → Edit settings**, configure the music folder as `/music`. Sleeve needs write access there to save completed downloads, repair lyrics, and rename tracks. On Linux, make sure the host directory is writable by UID/GID `10001` (or adapt the image's `sleeve` user to your host ownership). On Windows, use a Docker Desktop accessible path such as `C:/Users/you/Music` in `.env`.
+
+Jellyfin must be reachable from inside the container. If Jellyfin runs on the same Windows/macOS host, use `http://host.docker.internal:8096` as its address in Sleeve. The Compose file provides this hostname on Linux too; for Jellyfin on another machine or in another Compose stack, use an address reachable from the Sleeve container. Avoid `localhost` for Jellyfin unless it is running in the same container. The Jellyfin API key remains in Sleeve's private data volume, and the Jellyfin sign-in password is not saved.
+
+Optional provider values (`SEARXNG_URL`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`) and `SLEEVE_COOKIE_SECURE` can also be set in `.env`; Compose passes them to the container. Keep `.env` private. Set `SLEEVE_COOKIE_SECURE=1` when HTTPS is terminated by a trusted reverse proxy. The default image is CPU-based for Whisper. It installs FFmpeg and FFprobe from the Debian package repository; these are external tools with separate licenses, not binaries bundled in the Sleeve source.
+
 ## Configuration
 
-- Copy `.env.example` to `.env` only if enabling optional Spotify credentials. Keep `.env` local; it is ignored by Git.
+- For native startup, copy `.env.example` to `.env` only if enabling optional Spotify credentials. Docker Compose also uses `.env` for the host music path and passes the supported provider/cookie values into the container. Keep `.env` local; it is ignored by Git.
 - `SEARXNG_URL` is optional. Set it to your own SearXNG instance for video search/thumbnail lookup; yt-dlp search is used as a fallback where available.
 - The first visit shows Sleeve's welcome screen. Continue to sign in with a Jellyfin administrator account; successful sign-in marks the first-run setup complete. The server address is stored in the SQLite Automator profile, while the Jellyfin password is discarded after authentication.
 - Configure Jellyfin's server-to-server API key, the music folder, Whisper model/device, and backup behavior in **Automator → Edit settings**. Settings are stored in `automator_profile.sqlite3` in the private app-data directory; it contains a Jellyfin API key and must remain private. Sleeve does not import legacy JSON profiles. A one-time first-run reset clears the Automator profile and removes obsolete `automator_profile.json` and `jellyfin_auth.json` files; downloads, cookies, caches, and unrelated settings are preserved.
